@@ -169,7 +169,7 @@ describe("runHeartbeatOnce commitments", () => {
     });
   }
 
-  it("keeps due heartbeat tasks tool-capable when commitments are also due", async () => {
+  it("runs due commitments after tool-capable heartbeat tasks", async () => {
     const { result, sendTelegram, store } = await withTempHeartbeatSandbox(
       async ({ tmpDir, storePath, replySpy }) => {
         vi.stubEnv("OPENCLAW_STATE_DIR", tmpDir);
@@ -216,14 +216,23 @@ describe("runHeartbeatOnce commitments", () => {
             ctx: { Body?: string; OriginatingChannel?: string; OriginatingTo?: string },
             opts?: { disableTools?: boolean; skillFilter?: string[] },
           ) => {
-            expect(ctx.Body).toContain("Run the following periodic tasks");
-            expect(ctx.Body).toContain("- deployment-status: Check deployment status");
-            expect(ctx.Body).not.toContain("Due inferred follow-up commitments");
+            if (replySpy.mock.calls.length === 1) {
+              expect(ctx.Body).toContain("Run the following periodic tasks");
+              expect(ctx.Body).toContain("- deployment-status: Check deployment status");
+              expect(ctx.Body).not.toContain("Due inferred follow-up commitments");
+              expect(ctx.OriginatingChannel).toBe("telegram");
+              expect(ctx.OriginatingTo).toBe("stale-target");
+              expect(opts?.disableTools).toBeUndefined();
+              expect(opts?.skillFilter).toBeUndefined();
+              return { text: "Deployment status checked" };
+            }
+            expect(ctx.Body).toContain("Due inferred follow-up commitments");
+            expect(ctx.Body).toContain("How did the interview go?");
             expect(ctx.OriginatingChannel).toBe("telegram");
-            expect(ctx.OriginatingTo).toBe("stale-target");
-            expect(opts?.disableTools).toBeUndefined();
-            expect(opts?.skillFilter).toBeUndefined();
-            return { text: "Deployment status checked" };
+            expect(ctx.OriginatingTo).toBe("155462274");
+            expect(opts?.disableTools).toBe(true);
+            expect(opts?.skillFilter).toEqual([]);
+            return { text: "How did the interview go?" };
           },
         );
 
@@ -248,11 +257,24 @@ describe("runHeartbeatOnce commitments", () => {
     );
 
     expect(result.status).toBe("ran");
-    expect(sendTelegram).toHaveBeenCalled();
-    expectCommitmentFields(store.commitments[0], {
+    expect(sendTelegram).toHaveBeenCalledTimes(2);
+    expect(sendTelegram).toHaveBeenNthCalledWith(
+      1,
+      "stale-target",
+      "Deployment status checked",
+      expect.any(Object),
+    );
+    expect(sendTelegram).toHaveBeenNthCalledWith(
+      2,
+      "155462274",
+      "How did the interview go?",
+      expect.any(Object),
+    );
+    expect(store.commitments[0]).toMatchObject({
       id: "cm_interview",
-      status: "pending",
-      attempts: 0,
+      status: "sent",
+      attempts: 1,
+      sentAtMs: nowMs,
     });
   });
 
