@@ -688,7 +688,6 @@ export async function runPreparedReply(
       ? `[Thread starter - for context]\n${threadStarterBody}`
       : undefined;
   const drainedSystemEventBlocks: string[] = [];
-  let forceSenderIsOwnerFalseFromQueuedSystemEvents = false;
   const rebuildPromptBodies = async (): Promise<{
     prefixedCommandBody: string;
     queuedBody: string;
@@ -704,9 +703,6 @@ export async function runPreparedReply(
       });
       if (eventsBlock) {
         drainedSystemEventBlocks.push(eventsBlock.text);
-        if (!isHeartbeat && eventsBlock.requiresOwnerDowngrade === true) {
-          forceSenderIsOwnerFalseFromQueuedSystemEvents = true;
-        }
       }
     }
     return buildReplyPromptEnvelope({
@@ -1003,14 +999,10 @@ export async function runPreparedReply(
       senderName: normalizeOptionalString(sessionCtx.SenderName),
       senderUsername: normalizeOptionalString(sessionCtx.SenderUsername),
       senderE164: normalizeOptionalString(sessionCtx.SenderE164),
-      senderIsOwner:
-        forceSenderIsOwnerFalseForSystemEventRun || forceSenderIsOwnerFalseFromQueuedSystemEvents
-          ? false
-          : command.senderIsOwner,
+      senderIsOwner: forceSenderIsOwnerFalseForSystemEventRun ? false : command.senderIsOwner,
       traceAuthorized:
-        (forceSenderIsOwnerFalseForSystemEventRun || forceSenderIsOwnerFalseFromQueuedSystemEvents
-          ? false
-          : command.senderIsOwner) || (ctx.GatewayClientScopes ?? []).includes("operator.admin"),
+        (forceSenderIsOwnerFalseForSystemEventRun ? false : command.senderIsOwner) ||
+        (ctx.GatewayClientScopes ?? []).includes("operator.admin"),
       sessionFile: preparedSessionState.sessionFile,
       workspaceDir,
       config: cfg,

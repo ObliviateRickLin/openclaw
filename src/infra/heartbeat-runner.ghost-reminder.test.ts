@@ -232,11 +232,10 @@ describe("Ghost reminder bug (issue #13317)", () => {
     );
   };
 
-  const expectQueuedEventOwnership = async (params: {
+  const expectQueuedEventDoesNotSetSenderOwnership = async (params: {
     tmpPrefix: string;
     reason: "hook:wake" | "interval";
     isolatedSession?: boolean;
-    forceSenderIsOwnerFalse: boolean;
   }): Promise<void> => {
     const { result, sendTelegram, calledCtx } = await runHeartbeatCase({
       tmpPrefix: params.tmpPrefix,
@@ -256,7 +255,7 @@ describe("Ghost reminder bug (issue #13317)", () => {
     if (params.isolatedSession === true) {
       expect(calledCtx?.SessionKey).toContain(":heartbeat");
     }
-    expect(calledCtx?.ForceSenderIsOwnerFalse).toBe(params.forceSenderIsOwnerFalse);
+    expect(calledCtx?.ForceSenderIsOwnerFalse).toBeUndefined();
     expect(sendTelegram).not.toHaveBeenCalled();
   };
 
@@ -272,7 +271,7 @@ describe("Ghost reminder bug (issue #13317)", () => {
     expect(result.status).toBe("ran");
     expect(replyCallCount).toBe(1);
     expect(calledCtx?.Provider).toBe("heartbeat");
-    expect(calledCtx?.ForceSenderIsOwnerFalse).toBe(false);
+    expect(calledCtx?.ForceSenderIsOwnerFalse).toBeUndefined();
     expect(calledCtx?.Body).not.toContain("scheduled reminder has been triggered");
     expect(calledCtx?.Body).not.toContain("relay this reminder");
     expect(sendTelegram).toHaveBeenCalled();
@@ -318,7 +317,7 @@ describe("Ghost reminder bug (issue #13317)", () => {
     expect(result.status).toBe("ran");
     expect(replyCallCount).toBe(1);
     expect(calledCtx?.Provider).toBe("cron-event");
-    expect(calledCtx?.ForceSenderIsOwnerFalse).toBe(false);
+    expect(calledCtx?.ForceSenderIsOwnerFalse).toBeUndefined();
     expect(calledCtx?.Body).toContain("scheduled reminder has been triggered");
     expect(calledCtx?.Body).toContain("Cron: QMD maintenance completed");
     expect(calledCtx?.Body).not.toContain("Read HEARTBEAT.md");
@@ -375,7 +374,7 @@ describe("Ghost reminder bug (issue #13317)", () => {
         Body?: string;
       };
       expect(firstCtx.Provider).toBe("cron-event");
-      expect(firstCtx.ForceSenderIsOwnerFalse).toBe(false);
+      expect(firstCtx.ForceSenderIsOwnerFalse).toBeUndefined();
       expect(firstCtx.Body).toContain("Cron: QMD maintenance completed");
       expect(secondCtx.Provider).toBe("heartbeat");
       expect(secondCtx.Body).toContain("Read HEARTBEAT.md");
@@ -396,7 +395,7 @@ describe("Ghost reminder bug (issue #13317)", () => {
 
     expect(result.status).toBe("ran");
     expect(calledCtx?.Provider).toBe("cron-event");
-    expect(calledCtx?.ForceSenderIsOwnerFalse).toBe(false);
+    expect(calledCtx?.ForceSenderIsOwnerFalse).toBeUndefined();
     expect(calledCtx?.Body).toContain("Handle this reminder internally");
     expect(sendTelegram).not.toHaveBeenCalled();
   });
@@ -414,7 +413,7 @@ describe("Ghost reminder bug (issue #13317)", () => {
 
     expect(result.status).toBe("ran");
     expect(calledCtx?.Provider).toBe("exec-event");
-    expect(calledCtx?.ForceSenderIsOwnerFalse).toBe(true);
+    expect(calledCtx?.ForceSenderIsOwnerFalse).toBeUndefined();
     expect(calledCtx?.Body).toContain("Handle the result internally");
     expect(sendTelegram).not.toHaveBeenCalled();
   });
@@ -431,7 +430,7 @@ describe("Ghost reminder bug (issue #13317)", () => {
 
     expect(result.status).toBe("ran");
     expect(calledCtx?.Provider).toBe("exec-event");
-    expect(calledCtx?.ForceSenderIsOwnerFalse).toBe(true);
+    expect(calledCtx?.ForceSenderIsOwnerFalse).toBeUndefined();
     expect(calledCtx?.Body).toContain("exec finished: deploy succeeded");
     expect(sendTelegram).toHaveBeenCalled();
   });
@@ -469,7 +468,7 @@ describe("Ghost reminder bug (issue #13317)", () => {
 
     expect(result.status).toBe("ran");
     expect(calledCtx?.Provider).toBe("exec-event");
-    expect(calledCtx?.ForceSenderIsOwnerFalse).toBe(true);
+    expect(calledCtx?.ForceSenderIsOwnerFalse).toBeUndefined();
     expect(calledCtx?.Body).toContain("Handle the result internally");
     expect(sendTelegram).not.toHaveBeenCalled();
   });
@@ -489,27 +488,25 @@ describe("Ghost reminder bug (issue #13317)", () => {
     expect(result.status).toBe("ran");
     expect(calledCtx?.Provider).toBe("heartbeat");
     expect(calledCtx?.SessionKey).toContain(":heartbeat");
-    expect(calledCtx?.ForceSenderIsOwnerFalse).toBe(true);
+    expect(calledCtx?.ForceSenderIsOwnerFalse).toBeUndefined();
     expect(sendTelegram).not.toHaveBeenCalled();
   });
 
-  it("forces owner downgrade for hook:wake system event runs", async () => {
-    await expectQueuedEventOwnership({
+  it("keeps default sender ownership for hook:wake system event runs", async () => {
+    await expectQueuedEventDoesNotSetSenderOwnership({
       tmpPrefix: "openclaw-hook-event-",
       reason: "hook:wake",
-      forceSenderIsOwnerFalse: true,
     });
   });
 
-  it("forces owner downgrade for interval system event runs", async () => {
-    await expectQueuedEventOwnership({
+  it("keeps default sender ownership for interval system event runs", async () => {
+    await expectQueuedEventDoesNotSetSenderOwnership({
       tmpPrefix: "openclaw-interval-event-",
       reason: "interval",
-      forceSenderIsOwnerFalse: true,
     });
   });
 
-  it("preserves owner authority for internal mode events during heartbeat runs", async () => {
+  it("keeps default sender ownership for internal mode events during heartbeat runs", async () => {
     const { result, calledCtx } = await runHeartbeatCase({
       tmpPrefix: "openclaw-heartbeat-internal-mode-",
       replyText: "Handled internally",
@@ -529,24 +526,22 @@ describe("Ghost reminder bug (issue #13317)", () => {
 
     expect(result.status).toBe("ran");
     expect(calledCtx?.Provider).toBe("heartbeat");
-    expect(calledCtx?.ForceSenderIsOwnerFalse).toBe(false);
+    expect(calledCtx?.ForceSenderIsOwnerFalse).toBeUndefined();
   });
 
-  it("forces owner downgrade for hook:wake events with isolated sessions", async () => {
-    await expectQueuedEventOwnership({
+  it("keeps default sender ownership for hook:wake events with isolated sessions", async () => {
+    await expectQueuedEventDoesNotSetSenderOwnership({
       tmpPrefix: "openclaw-hook-event-isolated-",
       reason: "hook:wake",
       isolatedSession: true,
-      forceSenderIsOwnerFalse: true,
     });
   });
 
-  it("forces owner downgrade for isolated interval runs with only base-session events", async () => {
-    await expectQueuedEventOwnership({
+  it("keeps default sender ownership for isolated interval runs with only base-session events", async () => {
+    await expectQueuedEventDoesNotSetSenderOwnership({
       tmpPrefix: "openclaw-interval-event-isolated-",
       reason: "interval",
       isolatedSession: true,
-      forceSenderIsOwnerFalse: true,
     });
   });
 

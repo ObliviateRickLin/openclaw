@@ -10,7 +10,6 @@ import { isExecCompletionEvent } from "../../infra/heartbeat-events-filter.js";
 import {
   consumeSelectedSystemEventEntries,
   peekSystemEventEntries,
-  requiresOwnerDowngradeForQueuedEvent,
   type SystemEvent,
 } from "../../infra/system-events.js";
 import {
@@ -31,10 +30,9 @@ const selectGenericSystemEvents = (events: readonly SystemEvent[]): SystemEvent[
 export type FormattedSystemEventsResult = {
   text: string;
   hasQueuedEvents: boolean;
-  requiresOwnerDowngrade?: boolean;
 };
 
-/** Drain queued system events, format as `Event:` lines, return the block (or undefined). */
+/** Drain queued system events, format as `System:` lines, return the block (or undefined). */
 export async function drainFormattedSystemEventBlock(params: {
   cfg: OpenClawConfig;
   sessionKey: string;
@@ -106,7 +104,6 @@ export async function drainFormattedSystemEventBlock(params: {
 
   const summaryLines: string[] = [];
   const systemLines: string[] = [];
-  let requiresOwnerDowngrade = false;
   // Exec completions have a dedicated heartbeat prompt; leave those entries queued
   // so the heartbeat path can consume and deliver them.
   const queued = consumeSelectedSystemEventEntries(
@@ -118,13 +115,10 @@ export async function drainFormattedSystemEventBlock(params: {
     if (!compacted) {
       continue;
     }
-    if (requiresOwnerDowngradeForQueuedEvent(event)) {
-      requiresOwnerDowngrade = true;
-    }
     const timestamp = `[${formatSystemEventTimestamp(event.ts, params.cfg)}]`;
     let index = 0;
     for (const subline of compacted.split("\n")) {
-      systemLines.push(`Event: ${index === 0 ? `${timestamp} ` : ""}${subline}`);
+      systemLines.push(`System: ${index === 0 ? `${timestamp} ` : ""}${subline}`);
       index += 1;
     }
   }
@@ -150,7 +144,6 @@ export async function drainFormattedSystemEventBlock(params: {
         ? [...summaryLines, ...systemLines].join("\n")
         : systemLines.join("\n"),
     hasQueuedEvents: systemLines.length > 0,
-    requiresOwnerDowngrade,
   };
 }
 

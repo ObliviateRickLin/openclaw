@@ -96,7 +96,6 @@ import {
   buildExecEventPrompt,
   isCronSystemEvent,
   isExecCompletionEvent,
-  isHeartbeatNoiseEvent,
   isRelayableExecCompletionEvent,
 } from "./heartbeat-events-filter.js";
 import { emitHeartbeatEvent, resolveIndicatorType } from "./heartbeat-events.js";
@@ -133,7 +132,6 @@ import {
 import {
   consumeSelectedSystemEventEntries,
   peekSystemEventEntries,
-  requiresOwnerDowngradeForQueuedEvent,
   resolveSystemEventDeliveryContext,
   type SystemEvent,
 } from "./system-events.js";
@@ -1244,28 +1242,6 @@ function selectSystemEventsConsumedByHeartbeat(params: {
   return preflight.pendingEventEntries;
 }
 
-function isCronEventForHeartbeatRun(event: SystemEvent, preflight: HeartbeatPreflight): boolean {
-  return (
-    (preflight.isCronWake || event.contextKey?.startsWith("cron:") === true) &&
-    isCronSystemEvent(event.text)
-  );
-}
-
-function shouldForceNonOwnerForHeartbeatEvent(
-  event: SystemEvent,
-  preflight: HeartbeatPreflight,
-): boolean {
-  if (isExecCompletionEvent(event.text)) {
-    return true;
-  }
-  if (isHeartbeatNoiseEvent(event.text)) {
-    return false;
-  }
-  return (
-    !isCronEventForHeartbeatRun(event, preflight) && requiresOwnerDowngradeForQueuedEvent(event)
-  );
-}
-
 export async function runHeartbeatOnce(opts: {
   cfg?: OpenClawConfig;
   agentId?: string;
@@ -1567,17 +1543,6 @@ export async function runHeartbeatOnce(opts: {
     }
     runSessionKey = isolatedSessionKey;
   }
-  const activeSessionPendingEventEntries =
-    runSessionKey === sessionKey
-      ? preflight.pendingEventEntries
-      : peekSystemEventEntries(runSessionKey);
-  const hasNonOwnerInspectedEvents = preflight.pendingEventEntries.some((event) =>
-    shouldForceNonOwnerForHeartbeatEvent(event, preflight),
-  );
-  const hasNonOwnerActiveSessionEvents = activeSessionPendingEventEntries.some((event) =>
-    shouldForceNonOwnerForHeartbeatEvent(event, preflight),
-  );
-  const hasNonOwnerPendingEvents = hasNonOwnerInspectedEvents || hasNonOwnerActiveSessionEvents;
   // Update task last run times AFTER successful heartbeat completion
   const updateTaskTimestamps = async () => {
     if (!preflight.tasks || preflight.tasks.length === 0) {
@@ -1627,7 +1592,6 @@ export async function runHeartbeatOnce(opts: {
     MessageThreadId: delivery.threadId,
     Provider: hasExecCompletion ? "exec-event" : hasCronEvents ? "cron-event" : "heartbeat",
     SessionKey: runSessionKey,
-    ForceSenderIsOwnerFalse: hasNonOwnerPendingEvents,
   };
   if (!visibility.showAlerts && !visibility.showOk && !visibility.useIndicator) {
     emitHeartbeatEvent({

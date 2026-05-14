@@ -1246,9 +1246,9 @@ describe("runPreparedReply media-only handling", () => {
     const queueSettings = await import("./queue/settings-runtime.js");
     vi.mocked(queueSettings.resolveQueueSettings).mockReturnValueOnce({ mode: "interrupt" });
     vi.mocked(drainFormattedSystemEventBlock)
-      .mockResolvedValueOnce({ text: "Event: [t] Initial event.", hasQueuedEvents: true })
+      .mockResolvedValueOnce({ text: "System: [t] Initial event.", hasQueuedEvents: true })
       .mockResolvedValueOnce({
-        text: "Event: [t] Post-compaction context.",
+        text: "System: [t] Post-compaction context.",
         hasQueuedEvents: true,
       });
 
@@ -1271,12 +1271,12 @@ describe("runPreparedReply media-only handling", () => {
 
     await expect(runPromise).resolves.toEqual({ text: "ok" });
     const call = requireLastRunReplyAgentCall();
-    expect(call?.commandBody).toContain("Event: [t] Initial event.");
-    expect(call?.commandBody).not.toContain("Event: [t] Post-compaction context.");
-    expect(call?.transcriptCommandBody).not.toContain("Event: [t] Initial event.");
-    expect(call?.followupRun.prompt).toContain("Event: [t] Initial event.");
-    expect(call?.followupRun.prompt).not.toContain("Event: [t] Post-compaction context.");
-    expect(call?.followupRun.transcriptPrompt).not.toContain("Event: [t] Initial event.");
+    expect(call?.commandBody).toContain("System: [t] Initial event.");
+    expect(call?.commandBody).not.toContain("System: [t] Post-compaction context.");
+    expect(call?.transcriptCommandBody).not.toContain("System: [t] Initial event.");
+    expect(call?.followupRun.prompt).toContain("System: [t] Initial event.");
+    expect(call?.followupRun.prompt).not.toContain("System: [t] Post-compaction context.");
+    expect(call?.followupRun.transcriptPrompt).not.toContain("System: [t] Initial event.");
   });
 
   it("threads inbound context as current-turn context without changing transcript text", async () => {
@@ -1625,36 +1625,34 @@ describe("runPreparedReply media-only handling", () => {
 
   it("routes queued system events into user prompt text, not system prompt context", async () => {
     vi.mocked(drainFormattedSystemEventBlock).mockResolvedValueOnce({
-      text: "Event: [t] Model switched.",
+      text: "System: [t] Model switched.",
       hasQueuedEvents: true,
     });
 
     await runPreparedReply(baseParams());
 
     const call = requireRunReplyAgentCall();
-    expect(call.commandBody).toContain("Event: [t] Model switched.");
+    expect(call.commandBody).toContain("System: [t] Model switched.");
     expect(call.followupRun.run.extraSystemPrompt ?? "").not.toContain("Runtime System Events");
   });
 
-  it("downgrades direct sender ownership when queued system events are drained", async () => {
+  it("keeps direct sender ownership when queued system events are drained", async () => {
     vi.mocked(drainFormattedSystemEventBlock).mockResolvedValueOnce({
-      text: "Event: [t] External webhook payload.",
+      text: "System: [t] External webhook payload.",
       hasQueuedEvents: true,
-      requiresOwnerDowngrade: true,
     });
     const params = ownerParams();
 
     await runPreparedReply(params);
 
     const call = requireRunReplyAgentCall();
-    expect(call?.followupRun.run.senderIsOwner).toBe(false);
+    expect(call?.followupRun.run.senderIsOwner).toBe(true);
   });
 
-  it("keeps heartbeat sender ownership without an explicit downgrade flag", async () => {
+  it("keeps heartbeat sender ownership when queued system events are drained", async () => {
     vi.mocked(drainFormattedSystemEventBlock).mockResolvedValueOnce({
-      text: "Event: [t] External webhook payload.",
+      text: "System: [t] External webhook payload.",
       hasQueuedEvents: true,
-      requiresOwnerDowngrade: true,
     });
     const params = ownerParams();
 
@@ -1667,11 +1665,10 @@ describe("runPreparedReply media-only handling", () => {
     expect(call?.followupRun.run.senderIsOwner).toBe(true);
   });
 
-  it("downgrades heartbeat sender ownership with an explicit downgrade flag", async () => {
+  it("honors explicit ForceSenderIsOwnerFalse on heartbeat replies", async () => {
     vi.mocked(drainFormattedSystemEventBlock).mockResolvedValueOnce({
-      text: "Event: [t] External webhook payload.",
+      text: "System: [t] External webhook payload.",
       hasQueuedEvents: true,
-      requiresOwnerDowngrade: true,
     });
     const params = ownerParams();
 
@@ -1685,11 +1682,10 @@ describe("runPreparedReply media-only handling", () => {
     expect(call?.followupRun.run.senderIsOwner).toBe(false);
   });
 
-  it("downgrades sender ownership for system-event providers", async () => {
+  it("keeps sender ownership for system-event providers unless explicitly forced", async () => {
     vi.mocked(drainFormattedSystemEventBlock).mockResolvedValueOnce({
-      text: "Event: [t] Cron fired.",
+      text: "System: [t] Cron fired.",
       hasQueuedEvents: true,
-      requiresOwnerDowngrade: true,
     });
     const params = ownerParams();
 
@@ -1699,14 +1695,13 @@ describe("runPreparedReply media-only handling", () => {
     });
 
     const call = requireRunReplyAgentCall();
-    expect(call?.followupRun.run.senderIsOwner).toBe(false);
+    expect(call?.followupRun.run.senderIsOwner).toBe(true);
   });
 
   it("keeps sender ownership for internal queued notices", async () => {
     vi.mocked(drainFormattedSystemEventBlock).mockResolvedValueOnce({
-      text: "Event: [t] Model switched.",
+      text: "System: [t] Model switched.",
       hasQueuedEvents: true,
-      requiresOwnerDowngrade: false,
     });
     const params = ownerParams();
 
@@ -1745,9 +1740,8 @@ describe("runPreparedReply media-only handling", () => {
     // The hint must be extracted from the user body BEFORE prepending, so event context
     // does not shadow the low|medium|high shorthand.
     vi.mocked(drainFormattedSystemEventBlock).mockResolvedValueOnce({
-      text: "Event: [t] Node connected.",
+      text: "System: [t] Node connected.",
       hasQueuedEvents: true,
-      requiresOwnerDowngrade: true,
     });
 
     await runPreparedReply(
@@ -1765,22 +1759,21 @@ describe("runPreparedReply media-only handling", () => {
     expect(call.commandBody).toContain("tell me about cats");
     expect(call.commandBody).not.toMatch(/^low\b/);
     // Queued events are still present in the body.
-    expect(call.commandBody).toContain("Event: [t] Node connected.");
+    expect(call.commandBody).toContain("System: [t] Node connected.");
   });
 
   it("carries system events into followupRun.prompt for deferred turns", async () => {
     // drainFormattedSystemEventBlock returns the events block; the caller prepends it to
     // effectiveBaseBody for the queue path so deferred turns see events.
     vi.mocked(drainFormattedSystemEventBlock).mockResolvedValueOnce({
-      text: "Event: [t] Node connected.",
+      text: "System: [t] Node connected.",
       hasQueuedEvents: true,
-      requiresOwnerDowngrade: true,
     });
 
     await runPreparedReply(baseParams());
 
     const call = requireRunReplyAgentCall();
-    expect(call.followupRun.prompt).toContain("Event: [t] Node connected.");
+    expect(call.followupRun.prompt).toContain("System: [t] Node connected.");
   });
 
   it("does not strip think-hint token from deferred queue body", async () => {

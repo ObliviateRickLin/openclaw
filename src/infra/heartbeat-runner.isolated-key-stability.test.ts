@@ -333,7 +333,7 @@ describe("runHeartbeatOnce – isolated session key stability (#59493)", () => {
       const calledCtx = replyCall(replySpy);
       expect(calledCtx.SessionKey).toBe(isolatedSessionKey);
       expect(calledCtx.Provider).toBe("exec-event");
-      expect(calledCtx.ForceSenderIsOwnerFalse).toBe(true);
+      expect(calledCtx.ForceSenderIsOwnerFalse).toBeUndefined();
     });
   });
 

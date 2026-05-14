@@ -2873,7 +2873,7 @@ describe("drainFormattedSystemEvents", () => {
       });
 
       const expectedTimestampText = requireString(expectedTimestamp, "formatted timestamp");
-      expect(result).toContain(`Event: [${expectedTimestampText}] Model switched.`);
+      expect(result).toContain(`System: [${expectedTimestampText}] Model switched.`);
     } finally {
       resetSystemEventsForTest();
       vi.useRealTimers();

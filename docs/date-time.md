@@ -79,7 +79,7 @@ Queued system events inserted into agent context are prefixed with a timestamp u
 same timezone selection as message envelopes (default: host-local).
 
 ```
-Event: [2026-01-12 12:19:17 PST] Model switched.
+System: [2026-01-12 12:19:17 PST] Model switched.
 ```
 
 ### Configure user timezone + format

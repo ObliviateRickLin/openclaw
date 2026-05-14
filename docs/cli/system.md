@@ -32,7 +32,7 @@ openclaw system presence
 ## `system event`
 
 Enqueue a system event on the **main** session by default. The next heartbeat
-will inject it as an `Event:` line in the prompt. Use `--mode now` to trigger
+will inject it as a `System:` line in the prompt. Use `--mode now` to trigger
 the heartbeat immediately; `next-heartbeat` waits for the next scheduled tick.
 
 Pass `--session-key` to target a specific session (for example to relay an
