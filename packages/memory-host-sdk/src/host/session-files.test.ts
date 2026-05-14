@@ -240,6 +240,29 @@ describe("buildSessionEntry", () => {
     expect(entry.lineMap).toStrictEqual([3, 5]);
   });
 
+  it("drops legacy untrusted system wrappers from archived transcripts", async () => {
+    const jsonlLines = [
+      JSON.stringify({
+        type: "message",
+        message: {
+          role: "user",
+          content:
+            "System (untrusted): [2026-04-16 11:01:00 PDT] Exec completed (run-1, code 0) :: Converted: 1",
+        },
+      }),
+      JSON.stringify({
+        type: "message",
+        message: { role: "assistant", content: "User-facing reply" },
+      }),
+    ];
+    const filePath = path.join(tmpDir, "legacy-system-wrapper.jsonl");
+    fsSync.writeFileSync(filePath, jsonlLines.join("\n"));
+
+    const entry = requireSessionEntry(await buildSessionEntry(filePath));
+    expect(entry.content).toBe("Assistant: User-facing reply");
+    expect(entry.lineMap).toStrictEqual([2]);
+  });
+
   it("strips inbound metadata when a user envelope is split across text blocks", async () => {
     const jsonlLines = [
       JSON.stringify({
