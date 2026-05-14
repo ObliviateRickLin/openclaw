@@ -1,4 +1,5 @@
 import { detectInlineEvalArgv } from "../command-analysis/risks.js";
+import { parseEnvInvocationPrelude } from "../command-carriers.js";
 import { explainShellCommand } from "../command-explainer/extract.js";
 import type {
   CommandExplanation,
@@ -264,6 +265,9 @@ function shouldPlanWrapperPayload(
       risk.kind === "shell-wrapper" && spansOverlap(step.span.startIndex, step.span.endIndex, risk),
   );
   if (!hasShellWrapperRisk) {
+    return false;
+  }
+  if (hasLeadingVariableAssignment(step)) {
     return false;
   }
   const inlineCommand = extractBindableShellWrapperInlineCommand(step.argv);
@@ -698,6 +702,9 @@ function promptOnlyReasonsForStep(
   if (hasLeadingVariableAssignment(step)) {
     reasons.push("unsupported-shell-syntax");
   }
+  if (hasEnvMutationShellWrapperCarrier(step)) {
+    reasons.push("unsupported-shell-syntax");
+  }
   return uniquePromptOnlyReasons(reasons);
 }
 
@@ -862,6 +869,15 @@ function hasLeadingVariableAssignment(step: CommandStep): boolean {
     return false;
   }
   return /(?:^|[\s])[_A-Za-z][_A-Za-z0-9]*=/u.test(prefix);
+}
+
+function hasEnvMutationShellWrapperCarrier(step: CommandStep): boolean {
+  const parsed = parseEnvInvocationPrelude(step.argv);
+  if (!parsed?.usesModifiers) {
+    return false;
+  }
+  const carriedArgv = parsed.splitArgv ?? step.argv.slice(parsed.commandIndex);
+  return Boolean(extractBindableShellWrapperInlineCommand(carriedArgv));
 }
 
 function stepContainsSpan(step: CommandStep, startIndex: number, endIndex: number): boolean {

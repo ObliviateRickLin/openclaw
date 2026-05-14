@@ -428,11 +428,14 @@ describe("resolveAllowAlwaysPatterns", () => {
     const dir = makeTempDir();
     const tool = makeExecutable(dir, "tool");
     const bash = makeExecutable(dir, "bash");
+    const envPath = makeExecutable(dir, "env");
     const ls = makeExecutable(dir, "ls");
     const env = makePathEnv(dir);
     const safeBins = resolveSafeBins(undefined);
 
     for (const command of [
+      "BASH_ENV=/tmp/payload bash -c 'echo ok'",
+      "env BASH_ENV=/tmp/payload bash -c 'echo ok'",
       "cd /tmp; ./tool",
       "export BASH_ENV=/tmp/payload; bash -c 'echo ok'",
       "unset PATH; ls",
@@ -451,7 +454,7 @@ describe("resolveAllowAlwaysPatterns", () => {
 
       const result = await evaluateShellAllowlist({
         command,
-        allowlist: [{ pattern: tool }, { pattern: bash }, { pattern: ls }],
+        allowlist: [{ pattern: tool }, { pattern: bash }, { pattern: envPath }, { pattern: ls }],
         safeBins,
         cwd: dir,
         env,
@@ -475,6 +478,22 @@ describe("resolveAllowAlwaysPatterns", () => {
     });
     expect(patterns).toEqual([whoami]);
     expect(patterns).not.toContain("/bin/zsh");
+  });
+
+  it("does not persist relative shell-wrapper payload paths", async () => {
+    if (process.platform === "win32") {
+      return;
+    }
+    const dir = makeTempDir();
+    makeExecutable(dir, "tool");
+    const { persisted } = await resolvePersistedPatterns({
+      command: "sh -c './tool'",
+      dir,
+      env: makePathEnv(dir),
+      safeBins: resolveSafeBins(undefined),
+    });
+
+    expect(persisted).toStrictEqual([]);
   });
 
   it("does not persist wrapper payloads when outer arguments are evaluated", async () => {

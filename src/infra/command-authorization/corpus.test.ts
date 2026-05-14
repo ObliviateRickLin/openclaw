@@ -451,6 +451,8 @@ describe("command authorization planner corpus", () => {
     ". ./profile; ls",
     "source ./profile; ls",
     "eval ls",
+    "BASH_ENV=/tmp/payload bash -c 'echo ok'",
+    "env BASH_ENV=/tmp/payload bash -c 'echo ok'",
     "cd /tmp; ./tool",
     "export BASH_ENV=/tmp/payload; bash -c 'echo ok'",
     "unset PATH; ls",

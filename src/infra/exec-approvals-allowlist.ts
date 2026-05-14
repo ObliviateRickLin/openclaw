@@ -1289,6 +1289,11 @@ async function collectAllowAlwaysPatternsAsync(params: {
       platform: params.platform,
     },
   );
+  const nestedExecutable =
+    nestedPlan.kind === "unanalyzable" ? "" : (nestedPlan.units[0]?.executable ?? "");
+  if (isRelativePathScopedExecutableToken(nestedExecutable)) {
+    return;
+  }
   const nestedAnalysis = createExecCommandAnalysisFromAuthorizationPlan({
     plan: nestedPlan,
     cwd: params.cwd,
@@ -1305,6 +1310,16 @@ async function collectAllowAlwaysPatternsAsync(params: {
       out: params.out,
     });
   }
+}
+
+function isRelativePathScopedExecutableToken(token: string): boolean {
+  if (!token.includes("/") && !token.includes("\\")) {
+    return false;
+  }
+  const normalized = token.replace(/\\/g, "/");
+  return (
+    !normalized.startsWith("/") && !/^[A-Za-z]:\//u.test(normalized) && !normalized.startsWith("//")
+  );
 }
 
 export async function resolveAllowAlwaysPatternEntriesFromPlanAsync(params: {
