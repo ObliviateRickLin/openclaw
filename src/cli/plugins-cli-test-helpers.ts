@@ -204,6 +204,7 @@ vi.mock("../config/config.js", () => ({
 }));
 
 vi.mock("../config/paths.js", () => ({
+  isNixMode: false,
   resolveIsNixMode: () => false,
   resolveStateDir: () => resolveStateDir(),
 }));
