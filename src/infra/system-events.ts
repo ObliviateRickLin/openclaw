@@ -27,6 +27,7 @@ export type SystemEvent = {
 };
 
 const MAX_EVENTS = 20;
+const OWNER_SAFE_CONTEXT_PREFIXES = ["model:", "model-runtime:", "fast:", "mode:", "queue:"];
 
 type SessionQueue = {
   queue: SystemEvent[];
@@ -114,6 +115,25 @@ function applyContextKeyPolicy(entry: SessionQueue, incomingContextKey: string |
   if (incomingContextKey !== null) {
     entry.lastContextKey = incomingContextKey;
   }
+}
+
+export function requiresOwnerDowngradeForQueuedEvent(event: SystemEvent): boolean {
+  if (event.deliveryContext) {
+    return true;
+  }
+  const contextKey = event.contextKey ?? "";
+  if (contextKey) {
+    return !OWNER_SAFE_CONTEXT_PREFIXES.some((prefix) => contextKey.startsWith(prefix));
+  }
+  const lower = normalizeOptionalLowercaseString(event.text) ?? "";
+  return !(
+    lower.startsWith("post-compaction context:") ||
+    lower.startsWith("model switched ") ||
+    lower.startsWith("fast mode ") ||
+    lower.startsWith("thinking ") ||
+    lower.startsWith("elevated mode ") ||
+    lower.startsWith("reasoning ")
+  );
 }
 
 export function enqueueSystemEvent(text: string, options: SystemEventOptions) {

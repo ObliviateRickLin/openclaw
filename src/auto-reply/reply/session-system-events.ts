@@ -10,6 +10,7 @@ import { isExecCompletionEvent } from "../../infra/heartbeat-events-filter.js";
 import {
   consumeSelectedSystemEventEntries,
   peekSystemEventEntries,
+  requiresOwnerDowngradeForQueuedEvent,
   type SystemEvent,
 } from "../../infra/system-events.js";
 import {
@@ -26,27 +27,6 @@ const selectGenericSystemEvents = (events: readonly SystemEvent[]): SystemEvent[
   }
   return selected;
 };
-
-const OWNER_SAFE_CONTEXT_PREFIXES = ["model:", "model-runtime:", "fast:", "mode:", "queue:"];
-
-function requiresOwnerDowngradeForQueuedEvent(event: SystemEvent): boolean {
-  if (event.deliveryContext) {
-    return true;
-  }
-  const contextKey = event.contextKey ?? "";
-  if (contextKey) {
-    return !OWNER_SAFE_CONTEXT_PREFIXES.some((prefix) => contextKey.startsWith(prefix));
-  }
-  const lower = normalizeLowercaseStringOrEmpty(event.text);
-  return !(
-    lower.startsWith("post-compaction context:") ||
-    lower.startsWith("model switched ") ||
-    lower.startsWith("fast mode ") ||
-    lower.startsWith("thinking ") ||
-    lower.startsWith("elevated mode ") ||
-    lower.startsWith("reasoning ")
-  );
-}
 
 export type FormattedSystemEventsResult = {
   text: string;

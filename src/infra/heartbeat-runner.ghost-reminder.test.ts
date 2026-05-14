@@ -509,6 +509,29 @@ describe("Ghost reminder bug (issue #13317)", () => {
     });
   });
 
+  it("preserves owner authority for internal mode events during heartbeat runs", async () => {
+    const { result, calledCtx } = await runHeartbeatCase({
+      tmpPrefix: "openclaw-heartbeat-internal-mode-",
+      replyText: "Handled internally",
+      reason: "interval",
+      target: "none",
+      enqueue: (sessionKey) => {
+        enqueueSystemEvent("Model switched to gpt-5.5", {
+          sessionKey,
+          contextKey: "model:gpt-5.5",
+        });
+        enqueueSystemEvent("Elevated mode FULL.", {
+          sessionKey,
+          contextKey: "mode:elevated",
+        });
+      },
+    });
+
+    expect(result.status).toBe("ran");
+    expect(calledCtx?.Provider).toBe("heartbeat");
+    expect(calledCtx?.ForceSenderIsOwnerFalse).toBe(false);
+  });
+
   it("forces owner downgrade for hook:wake events with isolated sessions", async () => {
     await expectQueuedEventOwnership({
       tmpPrefix: "openclaw-hook-event-isolated-",

@@ -133,6 +133,7 @@ import {
 import {
   consumeSelectedSystemEventEntries,
   peekSystemEventEntries,
+  requiresOwnerDowngradeForQueuedEvent,
   resolveSystemEventDeliveryContext,
   type SystemEvent,
 } from "./system-events.js";
@@ -1260,7 +1261,9 @@ function shouldForceNonOwnerForHeartbeatEvent(
   if (isHeartbeatNoiseEvent(event.text)) {
     return false;
   }
-  return !isCronEventForHeartbeatRun(event, preflight);
+  return (
+    !isCronEventForHeartbeatRun(event, preflight) && requiresOwnerDowngradeForQueuedEvent(event)
+  );
 }
 
 export async function runHeartbeatOnce(opts: {
