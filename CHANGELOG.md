@@ -12,7 +12,7 @@ Docs: https://docs.openclaw.ai
 - Amazon Bedrock: externalize the Bedrock and Bedrock Mantle provider packages so core installs no longer pull AWS SDK dependencies unless those providers are installed.
 - Plugins: externalize Slack, OpenShell sandbox, and Anthropic Vertex so their runtime dependency cones install only when those plugins are installed.
 - Codex migration: remove the bundled `codex-cli` backend and repair legacy `codex-cli/*` model refs to the Codex app-server route on `openai/*`.
-- System events: stop storing or reading queued-event trust metadata, remove its OpenGrep enforcement rule, and render runtime event context with a single `System:` prefix to simplify async prompt context handling while legacy `trusted` options are ignored.
+- System events: stop storing or reading queued-event trust metadata, remove its OpenGrep enforcement rule, and render queued runtime context with an `Event:` prefix while legacy `trusted` options are ignored.
 - Control UI/WebChat: add a persisted auto-scroll mode selector so users can keep the current near-bottom behavior, always follow streaming output, or turn automatic streaming scroll off and use the New messages button manually. Fixes #7648 and #81287. Thanks @BunsDev.
 - ACP: add `acp.fallbacks` so ACP turns can try configured backup runtime backends when the primary backend is unavailable before any output is emitted. (#69542) Thanks @kaseonedge.
 - Gateway/startup: add owner-level startup trace attribution for auth, plugin loading, lookup counts, and plugin sidecar services. (#81738) Thanks @samzong.

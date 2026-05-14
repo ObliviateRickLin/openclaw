@@ -704,7 +704,7 @@ export async function runPreparedReply(
       });
       if (eventsBlock) {
         drainedSystemEventBlocks.push(eventsBlock.text);
-        if (!isHeartbeat && eventsBlock.hasQueuedEvents) {
+        if (!isHeartbeat && eventsBlock.requiresOwnerDowngrade === true) {
           forceSenderIsOwnerFalseFromQueuedSystemEvents = true;
         }
       }

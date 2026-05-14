@@ -1,5 +1,8 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { drainFormattedSystemEvents } from "../auto-reply/reply/session-system-events.js";
+import {
+  drainFormattedSystemEventBlock,
+  drainFormattedSystemEvents,
+} from "../auto-reply/reply/session-system-events.js";
 import type { OpenClawConfig } from "../config/config.js";
 import { resolveMainSessionKey } from "../config/sessions/main-session.js";
 import { isCronSystemEvent } from "./heartbeat-events-filter.js";
@@ -40,6 +43,19 @@ async function drainFormattedEvents(
   });
 }
 
+async function drainFormattedEventBlock(
+  sessionKey: string,
+  params?: Partial<Parameters<typeof drainFormattedSystemEventBlock>[0]>,
+) {
+  return await drainFormattedSystemEventBlock({
+    cfg,
+    sessionKey,
+    isMainSession: false,
+    isNewSession: false,
+    ...params,
+  });
+}
+
 describe("system events (session routing)", () => {
   beforeEach(() => {
     resetSystemEventsForTest();
@@ -62,7 +78,7 @@ describe("system events (session routing)", () => {
 
     // Discord session gets its own events block
     const discord = await drainFormattedEvents("discord:group:123");
-    expect(discord).toMatch(/System:\s+\[[^\]]+\] Discord reaction added: ✅/);
+    expect(discord).toMatch(/Event:\s+\[[^\]]+\] Discord reaction added: ✅/);
     expect(peekSystemEvents("discord:group:123")).toStrictEqual([]);
   });
 
@@ -298,19 +314,43 @@ describe("system events (session routing)", () => {
     const lines = result.split("\n");
     expect(lines.length).toBeGreaterThan(0);
     for (const line of lines) {
-      expect(line).toMatch(/^System:/);
+      expect(line).toMatch(/^Event:/);
     }
   });
 
-  it("formats queued events with the standard system prefix", async () => {
-    const key = "agent:main:test-system-prefix";
+  it("formats queued events with the standard event prefix", async () => {
+    const key = "agent:main:test-event-prefix";
     enqueueSystemEvent("Notification posted: fake", {
       sessionKey: key,
     });
 
     const result = await drainFormattedEvents(key);
-    expect(result).toMatch(/^System: \[[^\]]+\] Notification posted:/);
+    expect(result).toMatch(/^Event: \[[^\]]+\] Notification posted:/);
     expect(result).not.toMatch(/^System \(/m);
+  });
+
+  it("requests owner downgrade for external queued event sources", async () => {
+    const key = "agent:main:test-event-downgrade";
+    enqueueSystemEvent("Notification posted: fake", {
+      sessionKey: key,
+      contextKey: "notification:1",
+    });
+
+    const result = await drainFormattedEventBlock(key);
+    expect(result?.requiresOwnerDowngrade).toBe(true);
+  });
+
+  it("keeps internal queued notices from downgrading owner authority", async () => {
+    const key = "agent:main:test-internal-event-downgrade";
+    enqueueSystemEvent("Model switched to gpt-5.5", {
+      sessionKey: key,
+      contextKey: "model:gpt-5.5",
+    });
+    enqueueSystemEvent("Post-compaction context:\nnotes", { sessionKey: key });
+
+    const result = await drainFormattedEventBlock(key);
+    expect(result?.text).toContain("Event:");
+    expect(result?.requiresOwnerDowngrade).toBe(false);
   });
 
   it("scrubs node last-input suffix", async () => {
