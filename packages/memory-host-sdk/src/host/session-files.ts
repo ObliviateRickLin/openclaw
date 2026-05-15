@@ -437,7 +437,7 @@ function stripInboundMetadataForUserRole(text: string, role: "user" | "assistant
   return stripInboundMetadata(text);
 }
 
-const GENERATED_SYSTEM_MESSAGE_RE = /^System(?: \(untrusted\))?: \[[^\]]+\]\s*/;
+const GENERATED_SYSTEM_MESSAGE_RE = /^System: \[[^\]]+\]\s*/;
 
 function isGeneratedSystemWrapperMessage(text: string, role: "user" | "assistant"): boolean {
   if (role !== "user") {
@@ -648,7 +648,7 @@ export async function buildSessionEntry(
         // dropped by sanitizeSessionText. We deliberately do NOT use the prior
         // user message's pattern-match to drop the next assistant message:
         // user-typed text can match those same patterns (`[cron:...]`,
-        // generated or legacy `System: ...`) and a cross-message drop would let users
+        // generated `System: ...`) and a cross-message drop would let users
         // exfiltrate real assistant replies from the dreaming corpus by
         // prefixing their own prompt. See PR #70737 review (aisle-research-bot).
         continue;
