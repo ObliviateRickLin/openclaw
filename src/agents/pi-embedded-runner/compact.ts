@@ -986,6 +986,7 @@ async function compactEmbeddedPiSessionDirectOnce(
       );
       checkpointSnapshot = await captureCompactionCheckpointSnapshotAsync({
         agentId: sessionAgentId,
+        path: params.path,
         sessionId: params.sessionId,
       });
       compactionSessionManager = sessionManager;

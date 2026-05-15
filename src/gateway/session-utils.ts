@@ -47,6 +47,7 @@ import { resolveStateDir } from "../config/paths.js";
 import {
   buildGroupDisplayName,
   getSessionEntry,
+  resolveAgentSessionDatabaseTargetsSync,
   resolveAgentMainSessionKey,
   resolveFreshSessionTotalTokens,
   type SessionEntry,
@@ -923,9 +924,27 @@ export function resolveGatewaySessionDatabaseTarget(params: { cfg: OpenClawConfi
     sessionKey: key,
   });
   const agentId = resolveSessionRowAgentId(params.cfg, canonicalKey);
+  let databasePath = resolveOpenClawAgentSqlitePath({ agentId });
+  let selectedUpdatedAt = Number.NEGATIVE_INFINITY;
+  for (const candidate of resolveAgentSessionDatabaseTargetsSync(params.cfg, agentId)) {
+    const entry = getSessionEntry({
+      agentId: candidate.agentId,
+      path: candidate.databasePath,
+      sessionKey: canonicalKey,
+    });
+    if (!entry) {
+      continue;
+    }
+    const updatedAt =
+      typeof entry.updatedAt === "number" && Number.isFinite(entry.updatedAt) ? entry.updatedAt : 0;
+    if (updatedAt >= selectedUpdatedAt) {
+      selectedUpdatedAt = updatedAt;
+      databasePath = candidate.databasePath;
+    }
+  }
   return {
     agentId,
-    databasePath: resolveOpenClawAgentSqlitePath({ agentId }),
+    databasePath,
     canonicalKey,
   };
 }

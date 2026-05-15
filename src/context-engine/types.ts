@@ -109,6 +109,7 @@ export type ContextEngineMaintenanceResult = TranscriptRewriteResult;
 
 export type ContextEngineTranscriptScope = {
   agentId: string;
+  path?: string;
   sessionId: string;
 };
 

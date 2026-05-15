@@ -86,6 +86,7 @@ function cloneTranscriptEvents(events: unknown[]): PiTranscriptEntry[] | null {
 
 function loadTranscriptEntriesFromSqlite(params: {
   agentId: string;
+  path?: string;
   sessionId: string;
 }): PiTranscriptEntry[] | null {
   const agentId = params.agentId.trim() || DEFAULT_AGENT_ID;
@@ -96,6 +97,7 @@ function loadTranscriptEntriesFromSqlite(params: {
   return cloneTranscriptEvents(
     loadSqliteSessionTranscriptEvents({
       agentId,
+      path: params.path,
       sessionId,
     }).map((entry) => entry.event),
   );
@@ -136,10 +138,12 @@ export async function readSessionLeafIdFromTranscriptAsync(
 export async function forkCompactionCheckpointTranscriptAsync(params: {
   sourceSessionId: string;
   agentId: string;
+  path?: string;
   targetCwd?: string;
 }): Promise<ForkedCompactionCheckpointTranscript | null> {
   const entries = loadTranscriptEntriesFromSqlite({
     agentId: params.agentId,
+    path: params.path,
     sessionId: params.sourceSessionId,
   });
   if (!entries) {
@@ -168,6 +172,7 @@ export async function forkCompactionCheckpointTranscriptAsync(params: {
   try {
     replaceSqliteSessionTranscriptEvents({
       agentId,
+      path: params.path,
       sessionId,
       events: [
         header,
@@ -186,12 +191,14 @@ export async function forkCompactionCheckpointTranscriptAsync(params: {
  */
 export async function captureCompactionCheckpointSnapshotAsync(params: {
   agentId: string;
+  path?: string;
   sessionId: string;
   maxBytes?: number;
 }): Promise<CapturedCompactionCheckpointSnapshot | null> {
   const maxBytes = params.maxBytes ?? MAX_COMPACTION_CHECKPOINT_SNAPSHOT_BYTES;
   const entries = loadTranscriptEntriesFromSqlite({
     agentId: params.agentId,
+    path: params.path,
     sessionId: params.sessionId,
   });
   if (!entries || transcriptEventsByteLength(entries) > maxBytes) {
