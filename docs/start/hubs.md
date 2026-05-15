@@ -165,7 +165,7 @@ Use these hubs to discover every page, including deep dives and reference docs t
 - [Building plugins](/plugins/building-plugins)
 - [Plugin hooks](/plugins/hooks)
 - [Plugin manifest](/plugins/manifest)
-- [Agent tools](/plugins/building-plugins#registering-agent-tools)
+- [Agent tools](/plugins/building-plugins#register-optional-tools)
 - [Plugin bundles](/plugins/bundles)
 - [ClawHub](/clawhub)
 - [Capability cookbook](/tools/capability-cookbook)

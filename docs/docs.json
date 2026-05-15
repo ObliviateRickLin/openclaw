@@ -98,7 +98,7 @@
     },
     {
       "source": "/plugins/agent-tools",
-      "destination": "/plugins/building-plugins#registering-agent-tools"
+      "destination": "/plugins/building-plugins#register-optional-tools"
     },
     {
       "source": "/gateway/admin-http-rpc",

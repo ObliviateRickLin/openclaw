@@ -5,7 +5,7 @@ read_when:
 title: "Registering tools"
 ---
 
-This page has moved. See [Building Plugins: Registering agent tools](/plugins/building-plugins#registering-agent-tools).
+This page has moved. See [Building plugins: Register optional tools](/plugins/building-plugins#register-optional-tools).
 
 ## Related
 

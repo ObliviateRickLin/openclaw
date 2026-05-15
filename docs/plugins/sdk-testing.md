@@ -13,8 +13,8 @@ plugins.
 
 <Tip>
   **Looking for test examples?** The how-to guides include worked test examples:
-  [Channel plugin tests](/plugins/sdk-channel-plugins#step-6-test) and
-  [Provider plugin tests](/plugins/sdk-provider-plugins#step-6-test).
+  [Channel plugin tests](/plugins/sdk-channel-plugins#build-the-channel) and
+  [Provider plugin tests](/plugins/sdk-provider-plugins#build-the-provider).
 </Tip>
 
 ## Test utilities

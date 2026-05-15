@@ -11,7 +11,7 @@ read_when:
 Reference for plugin packaging (`package.json` metadata), manifests (`openclaw.plugin.json`), setup entries, and config schemas.
 
 <Tip>
-**Looking for a walkthrough?** The how-to guides cover packaging in context: [Channel plugins](/plugins/sdk-channel-plugins#step-1-package-and-manifest) and [Provider plugins](/plugins/sdk-provider-plugins#step-1-package-and-manifest).
+**Looking for a walkthrough?** The how-to guides cover packaging in context: [Channel plugins](/plugins/sdk-channel-plugins#build-the-channel) and [Provider plugins](/plugins/sdk-provider-plugins#build-the-provider).
 </Tip>
 
 ## Package metadata
