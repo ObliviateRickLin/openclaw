@@ -980,7 +980,47 @@
     "target": "ACP Agents 设置"
   },
   {
+    "source": "Adding capabilities",
+    "target": "添加能力"
+  },
+  {
+    "source": "Building channel plugins",
+    "target": "构建频道插件"
+  },
+  {
+    "source": "Building CLI backend plugins",
+    "target": "构建 CLI 后端插件"
+  },
+  {
+    "source": "Building provider plugins",
+    "target": "构建提供商插件"
+  },
+  {
     "source": "ds4 (local DeepSeek V4)",
     "target": "ds4（本地 DeepSeek V4）"
+  },
+  {
+    "source": "Plugin architecture",
+    "target": "插件架构"
+  },
+  {
+    "source": "Runtime helpers",
+    "target": "运行时辅助工具"
+  },
+  {
+    "source": "Provider runtime hooks",
+    "target": "提供商运行时钩子"
+  },
+  {
+    "source": "SDK entry points",
+    "target": "SDK 入口点"
+  },
+  {
+    "source": "SDK runtime",
+    "target": "SDK 运行时"
+  },
+  {
+    "source": "SDK testing",
+    "target": "SDK 测试"
   }
 ]

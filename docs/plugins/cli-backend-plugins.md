@@ -2,6 +2,7 @@
 summary: "Build a plugin that registers a local AI CLI backend"
 title: "Building CLI backend plugins"
 sidebarTitle: "CLI backend plugins"
+doc-schema-version: 1
 read_when:
   - You are building a local AI CLI backend plugin
   - You want to register a backend for model refs such as acme-cli/model
@@ -15,20 +16,16 @@ backend. The backend appears as a provider prefix in model refs:
 acme-cli/acme-large
 ```
 
-Use a CLI backend when the upstream integration is already exposed as a local
-command, when the CLI owns local login state, or when the CLI is a useful
-fallback if API providers are unavailable.
+Use a CLI backend when the upstream integration already exists as a local
+command, the CLI owns local login state, or the CLI is a useful fallback if API
+providers are unavailable.
 
-<Info>
-  If the upstream service exposes a normal HTTP model API, write a
-  [provider plugin](/plugins/sdk-provider-plugins) instead. If the upstream
-  runtime owns complete agent sessions, tool events, compaction, or background
-  task state, use an [agent harness](/plugins/sdk-agent-harness).
-</Info>
+If the upstream service exposes a normal HTTP model API, build a
+[provider plugin](/plugins/sdk-provider-plugins). If the upstream runtime owns
+agent sessions, tool events, compaction, or background task state, use an
+[agent harness](/plugins/sdk-agent-harness).
 
 ## What the plugin owns
-
-A CLI backend plugin has three contracts:
 
 | Contract             | File                   | Purpose                                                   |
 | -------------------- | ---------------------- | --------------------------------------------------------- |
@@ -40,7 +37,7 @@ The manifest is discovery metadata. It does not execute the CLI and does not
 register runtime behavior. Runtime behavior starts when the plugin entry calls
 `api.registerCliBackend(...)`.
 
-## Minimal backend plugin
+## Build the backend
 
 <Steps>
   <Step title="Create package metadata">
@@ -69,9 +66,9 @@ register runtime behavior. Runtime behavior starts when the plugin entry calls
     }
     ```
 
-    Published packages must ship built JavaScript runtime files. If your source
+    Published packages must ship built JavaScript runtime files. If the source
     entry is `./src/index.ts`, add `openclaw.runtimeExtensions` that points at
-    the built JavaScript peer. See [Entry points](/plugins/sdk-entrypoints).
+    the built JavaScript peer. See [SDK entry points](/plugins/sdk-entrypoints).
 
   </Step>
 
@@ -101,19 +98,19 @@ register runtime behavior. Runtime behavior starts when the plugin entry calls
 
     `setup.cliBackends` is the descriptor-first setup surface. Add it when
     model discovery, onboarding, or status should recognize the backend without
-    loading plugin runtime. Use `requiresRuntime: false` only when those static
+    loading the plugin runtime. Use `requiresRuntime: false` only when static
     descriptors are enough for setup.
 
   </Step>
 
   <Step title="Register the backend">
     ```typescript index.ts
-    import { definePluginEntry } from "openclaw/plugin-sdk/plugin-entry";
     import {
       CLI_FRESH_WATCHDOG_DEFAULTS,
       CLI_RESUME_WATCHDOG_DEFAULTS,
       type CliBackendPlugin,
     } from "openclaw/plugin-sdk/cli-backend";
+    import { definePluginEntry } from "openclaw/plugin-sdk/plugin-entry";
 
     function buildAcmeCliBackend(): CliBackendPlugin {
       return {
@@ -162,60 +159,58 @@ register runtime behavior. Runtime behavior starts when the plugin entry calls
     ```
 
     The backend id must match the manifest `cliBackends` entry. The registered
-    `config` is only the default; user config under
+    `config` is the default; user config under
     `agents.defaults.cliBackends.acme-cli` is merged over it at runtime.
 
   </Step>
 </Steps>
 
-## Config shape
+## Keep the config small
 
-`CliBackendConfig` describes how OpenClaw should launch and parse the CLI:
+`CliBackendConfig` tells OpenClaw how to launch the CLI, pass prompts and
+models, parse output, resume sessions, pass images, and apply reliability
+watchdogs. Start with the smallest static config that matches the CLI.
 
-| Field                                     | Use                                                         |
-| ----------------------------------------- | ----------------------------------------------------------- |
-| `command`                                 | Binary name or absolute command path                        |
-| `args`                                    | Base argv for fresh runs                                    |
-| `resumeArgs`                              | Alternate argv for resumed sessions; supports `{sessionId}` |
-| `output` / `resumeOutput`                 | Parser: `json`, `jsonl`, or `text`                          |
-| `input`                                   | Prompt transport: `arg` or `stdin`                          |
-| `modelArg`                                | Flag used before the model id                               |
-| `modelAliases`                            | Map OpenClaw model ids to CLI-native ids                    |
-| `sessionArg` / `sessionArgs`              | How to pass a session id                                    |
-| `sessionMode`                             | `always`, `existing`, or `none`                             |
-| `sessionIdFields`                         | JSON fields OpenClaw reads from CLI output                  |
-| `systemPromptArg` / `systemPromptFileArg` | System prompt transport                                     |
-| `systemPromptWhen`                        | `first`, `always`, or `never`                               |
-| `imageArg` / `imageMode`                  | Image path support                                          |
-| `serialize`                               | Keep same-backend runs ordered                              |
-| `reliability.watchdog`                    | No-output timeout tuning                                    |
+Common fields include:
 
-Prefer the smallest static config that matches the CLI. Add plugin callbacks
-only for behavior that really belongs to the backend.
+- `command` and `args` for fresh runs.
+- `resumeArgs`, `sessionArg`, `sessionArgs`, `sessionMode`, and
+  `sessionIdFields` for session reuse. `resumeArgs` supports `{sessionId}` as a
+  placeholder for the OpenClaw session id.
+- `output` and `resumeOutput` for `json`, `jsonl`, or `text` parsing.
+- `input`, `modelArg`, `systemPromptArg`, and `systemPromptFileArg` for prompt
+  transport.
+- `imageArg` and `imageMode` for image paths.
+- `modelAliases` to map OpenClaw model ids to CLI-native model ids.
+- `sessionMode` to choose `always`, `existing`, or `none` session behavior.
+- `systemPromptWhen` to choose whether OpenClaw passes a system prompt on the
+  `first`, `always`, or `never` execution.
+- `serialize` and `reliability.watchdog` for ordering and no-output timeout
+  behavior.
 
-## Advanced backend hooks
+Use plugin callbacks only for behavior that belongs to the backend:
 
-`CliBackendPlugin` can also define:
+| Callback or field                  | Use                                                   |
+| ---------------------------------- | ----------------------------------------------------- |
+| `normalizeConfig(config, context)` | Rewrite legacy user config after merge                |
+| `resolveExecutionArgs(ctx)`        | Add request-scoped flags such as thinking effort      |
+| `prepareExecution(ctx)`            | Create temporary auth or config bridges before launch |
+| `transformSystemPrompt(ctx)`       | Apply a final CLI-specific system-prompt transform    |
+| `textTransforms`                   | Bidirectional prompt and output replacements          |
+| `defaultAuthProfileId`             | Prefer a specific OpenClaw auth profile               |
+| `authEpochMode`                    | Decide how auth changes invalidate stored sessions    |
+| `nativeToolMode`                   | Declare whether the CLI has always-on native tools    |
+| `bundleMcp` and `bundleMcpMode`    | Opt into OpenClaw's loopback MCP tool bridge          |
 
-| Hook                               | Use                                                    |
-| ---------------------------------- | ------------------------------------------------------ |
-| `normalizeConfig(config, context)` | Rewrite legacy user config after merge                 |
-| `resolveExecutionArgs(ctx)`        | Add request-scoped flags such as thinking effort       |
-| `prepareExecution(ctx)`            | Create temporary auth or config bridges before launch  |
-| `transformSystemPrompt(ctx)`       | Apply a final CLI-specific system prompt transform     |
-| `textTransforms`                   | Bidirectional prompt/output replacements               |
-| `defaultAuthProfileId`             | Prefer a specific OpenClaw auth profile                |
-| `authEpochMode`                    | Decide how auth changes invalidate stored CLI sessions |
-| `nativeToolMode`                   | Declare whether the CLI has always-on native tools     |
-| `bundleMcp` / `bundleMcpMode`      | Opt into OpenClaw's loopback MCP tool bridge           |
+See [SDK overview](/plugins/sdk-overview) for the registration API and
+[CLI backends](/gateway/cli-backends) for user-facing runtime config.
+When a backend hook can express CLI-specific behavior, keep that behavior in the
+provider-owned backend hook instead of adding CLI-specific branches to core.
 
-Keep these hooks provider-owned. Do not add CLI-specific branches to core when a
-backend hook can express the behavior.
+## Enable the MCP tool bridge
 
-## MCP tool bridge
-
-CLI backends do not receive OpenClaw tools by default. If the CLI can consume an
-MCP configuration, opt in explicitly:
+CLI backends do not receive OpenClaw tools by default. If the CLI can consume
+an MCP configuration, opt in explicitly:
 
 ```typescript
 return {
@@ -230,7 +225,12 @@ return {
 };
 ```
 
-Supported bridge modes are:
+Only enable the bridge when the CLI can actually consume it. If the CLI has an
+always-on native tool layer that cannot be disabled, set
+`nativeToolMode: "always-on"` so OpenClaw can fail closed when a caller
+requires no native tools.
+
+`bundleMcpMode` tells OpenClaw how to expose the loopback MCP bridge:
 
 | Mode                     | Use                                                              |
 | ------------------------ | ---------------------------------------------------------------- |
@@ -238,13 +238,9 @@ Supported bridge modes are:
 | `codex-config-overrides` | CLIs that accept config overrides on argv                        |
 | `gemini-system-settings` | CLIs that read MCP settings from their system settings directory |
 
-Only enable the bridge when the CLI can actually consume it. If the CLI has its
-own built-in tool layer that cannot be disabled, set `nativeToolMode:
-"always-on"` so OpenClaw can fail closed when a caller requires no native tools.
+## Document user overrides
 
-## User configuration
-
-Users can override any backend default:
+Users can override backend defaults:
 
 ```json5
 {
@@ -268,10 +264,11 @@ Users can override any backend default:
 }
 ```
 
-Document the minimum override users are likely to need. Usually that is only
-`command` when the binary is outside `PATH`.
+Document only the overrides users are likely to need. Most backends need to
+document `command` when the binary is outside `PATH`, plus any required login
+or profile flags.
 
-## Verification
+## Verify the backend
 
 For bundled plugins, add a focused test around the builder and setup
 registration, then run the plugin's targeted test lane:
@@ -298,13 +295,14 @@ session-resume behavior.
 <Check>`setup.cliBackends` is present when setup/model discovery should see the backend cold</Check>
 <Check>`api.registerCliBackend(...)` uses the same backend id as the manifest</Check>
 <Check>User overrides under `agents.defaults.cliBackends.<id>` still win</Check>
-<Check>Session, system prompt, image, and output parser settings match the real CLI contract</Check>
+<Check>Session, system prompt, image, MCP, and output parser settings match the real CLI contract</Check>
 <Check>Targeted tests and at least one live CLI smoke prove the backend path</Check>
 
 ## Related
 
-- [CLI backends](/gateway/cli-backends) - user configuration and runtime behavior
-- [Building plugins](/plugins/building-plugins) - package and manifest basics
-- [Plugin SDK overview](/plugins/sdk-overview) - registration API reference
-- [Plugin manifest](/plugins/manifest) - `cliBackends` and setup descriptors
-- [Agent harness](/plugins/sdk-agent-harness) - full external agent runtimes
+- [CLI backends](/gateway/cli-backends)
+- [Building plugins](/plugins/building-plugins)
+- [Plugin SDK overview](/plugins/sdk-overview)
+- [Plugin manifest](/plugins/manifest)
+- [SDK entry points](/plugins/sdk-entrypoints)
+- [Agent harness plugins](/plugins/sdk-agent-harness)
