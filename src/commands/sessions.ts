@@ -9,8 +9,8 @@ import { info } from "../globals.js";
 import { writeTextAtomic } from "../infra/json-files.js";
 import { parseAgentSessionKey } from "../routing/session-key.js";
 import { type RuntimeEnv, writeRuntimeJson } from "../runtime.js";
-import type { SessionKind } from "../sessions/classify-session-kind.js";
-import { isAcpSessionKey, isCronSessionKey } from "../sessions/session-key-utils.js";
+import { classifySessionKind, type SessionKind } from "../sessions/classify-session-kind.js";
+import { isAcpSessionKey } from "../sessions/session-key-utils.js";
 import { createLazyImportLoader } from "../shared/lazy-promise.js";
 import { normalizeOptionalLowercaseString } from "../shared/string-coerce.js";
 import { resolveAgentRuntimeLabel } from "../status/agent-runtime-label.js";
@@ -178,22 +178,6 @@ async function lookupContextTokensForDisplay(model: string): Promise<number | un
   return lookupContextTokens(model, { allowAsyncLoad: false });
 }
 
-function classifySessionKey(key: string, entry?: { chatType?: string | null }): SessionRow["kind"] {
-  if (key === "global") {
-    return "global";
-  }
-  if (key === "unknown") {
-    return "unknown";
-  }
-  if (isCronSessionKey(key)) {
-    return "cron";
-  }
-  if (entry?.chatType === "group" || entry?.chatType === "channel") {
-    return "group";
-  }
-  return "direct";
-}
-
 const formatKindCell = (kind: SessionRow["kind"], rich: boolean) => {
   const label = kind.padEnd(KIND_PAD);
   if (!rich) {
@@ -245,10 +229,9 @@ async function exportRawSessionStores(params: {
 }> {
   const stores = params.targets.map((target) => {
     const sessions = Object.fromEntries(
-      listSessionEntries({ agentId: target.agentId }).map(({ sessionKey, entry }) => [
-        sessionKey,
-        entry,
-      ]),
+      listSessionEntries({ agentId: target.agentId, path: target.databasePath }).map(
+        ({ sessionKey, entry }) => [sessionKey, entry],
+      ),
     );
     return {
       agentId: target.agentId,
@@ -351,7 +334,7 @@ export async function sessionsCommand(
   }
 
   const allRows = targets.flatMap((target) =>
-    listSessionEntries({ agentId: target.agentId })
+    listSessionEntries({ agentId: target.agentId, path: target.databasePath })
       .filter(({ entry }) => {
         if (activeMinutes === undefined) {
           return true;
@@ -377,7 +360,7 @@ export async function sessionsCommand(
           agentId,
           acpRuntime,
           agentRuntime,
-          kind: classifySessionKey(row.key, entry),
+          kind: classifySessionKind(row.key, entry),
           runtimeLabel: resolveSessionRuntimeLabel({
             cfg,
             entry,

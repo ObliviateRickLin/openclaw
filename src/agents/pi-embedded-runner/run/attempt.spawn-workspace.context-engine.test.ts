@@ -547,7 +547,7 @@ describe("runEmbeddedAttempt context engine sessionKey forwarding", () => {
 
   it("skips bootstrap preload on completed continuation-skip turns", async () => {
     hoisted.resolveContextInjectionModeMock.mockReturnValue("continuation-skip");
-    hoisted.hasCompletedBootstrapTurnMock.mockResolvedValue(true);
+    hoisted.hasCompletedBootstrapTranscriptTurnMock.mockResolvedValue(true);
     hoisted.isWorkspaceBootstrapPendingMock.mockResolvedValue(false);
 
     await createContextEngineAttemptRunner({
@@ -567,7 +567,7 @@ describe("runEmbeddedAttempt context engine sessionKey forwarding", () => {
       },
     });
 
-    expect(hoisted.hasCompletedBootstrapTurnMock).toHaveBeenCalledOnce();
+    expect(hoisted.hasCompletedBootstrapTranscriptTurnMock).toHaveBeenCalledOnce();
     expect(hoisted.isWorkspaceBootstrapPendingMock).toHaveBeenCalledOnce();
     expect(hoisted.resolveBootstrapFilesForRunMock).not.toHaveBeenCalled();
     expect(hoisted.resolveBootstrapContextForRunMock).not.toHaveBeenCalled();

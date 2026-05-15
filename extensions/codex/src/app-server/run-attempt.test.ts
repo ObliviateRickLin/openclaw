@@ -41,7 +41,10 @@ import {
 } from "./plugin-app-cache-key.js";
 import type { CodexServerNotification } from "./protocol.js";
 import { rememberCodexRateLimits, resetCodexRateLimitCacheForTests } from "./rate-limit-cache.js";
-import { runCodexAppServerAttempt, __testing } from "./run-attempt.js";
+import {
+  runCodexAppServerAttempt as runCodexAppServerAttemptImpl,
+  __testing,
+} from "./run-attempt.js";
 import {
   clearCodexAppServerBinding,
   readCodexAppServerBinding,
@@ -613,7 +616,7 @@ describe("runCodexAppServerAttempt", () => {
       sessionId: "session-1",
       events: [],
     });
-    __testing.resetCodexAppServerClientFactoryForTests();
+    resetCodexAppServerClientFactoryForTest();
     __testing.resetOpenClawCodingToolsFactoryForTests();
     resetCodexRateLimitCacheForTests();
     nativeHookRelayTesting.clearNativeHookRelaysForTests();
@@ -3775,12 +3778,8 @@ describe("runCodexAppServerAttempt", () => {
     const run = runCodexAppServerAttempt(createParams("session", path.join(tempDir, "workspace")));
     await waitForMethod("turn/start");
 
-    expect(
-      queueActiveRunMessageForTest("session", "first", { steeringMode: "one-at-a-time" }),
-    ).toBe(true);
-    expect(
-      queueActiveRunMessageForTest("session", "second", { steeringMode: "one-at-a-time" }),
-    ).toBe(true);
+    expect(queueActiveRunMessageForTest("session", "first", { steeringMode: "all" })).toBe(true);
+    expect(queueActiveRunMessageForTest("session", "second", { steeringMode: "all" })).toBe(true);
 
     await vi.waitFor(
       () =>
@@ -4862,7 +4861,7 @@ describe("runCodexAppServerAttempt", () => {
   });
 
   it("times out app-server startup before thread setup can hang forever", async () => {
-    __testing.setCodexAppServerClientFactoryForTests(() => new Promise<never>(() => undefined));
+    setCodexAppServerClientFactoryForTest(() => new Promise<never>(() => undefined));
     const params = createParams("session", path.join(tempDir, "workspace"));
     params.timeoutMs = 1;
 

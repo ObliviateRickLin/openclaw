@@ -70,9 +70,14 @@ function isResolvedSessionKeyVisible(params: {
   }).some(([key]) => key === params.key);
 }
 
-function loadAgentSessionRows(agentId: string): Record<string, SessionEntry> {
+function loadAgentSessionRows(params: {
+  agentId: string;
+  databasePath?: string;
+}): Record<string, SessionEntry> {
   return Object.fromEntries(
-    listSessionEntries({ agentId }).map(({ sessionKey, entry }) => [sessionKey, entry]),
+    listSessionEntries({ agentId: params.agentId, path: params.databasePath }).map(
+      ({ sessionKey, entry }) => [sessionKey, entry],
+    ),
   );
 }
 
@@ -122,7 +127,10 @@ export async function resolveSessionKeyFromResolveParams(params: {
 
   if (hasKey) {
     const target = resolveGatewaySessionDatabaseTarget({ cfg, key });
-    const store = loadAgentSessionRows(target.agentId);
+    const store = loadAgentSessionRows({
+      agentId: target.agentId,
+      databasePath: target.databasePath,
+    });
     if (store[target.canonicalKey]) {
       if (
         !isResolvedSessionKeyVisible({
