@@ -363,7 +363,6 @@ afterEach(async () => {
   const { resetContextWindowCacheForTest, resetModelCatalogReadyCacheForTest } =
     await loadWorkerCleanupHelpers();
   closeOpenClawAgentDatabasesForTest();
-  closeOpenClawStateDatabaseForTest();
   resetContextWindowCacheForTest();
   resetModelCatalogReadyCacheForTest();
   await installDefaultPluginRegistry();
