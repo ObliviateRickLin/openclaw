@@ -134,9 +134,11 @@ The recreated comment should follow this format:
 <redacted original content>
 ```
 
-### issue_body / pull_request_body — Cannot Purge
+### issue_body / pull_request_body — Cannot Purge Edit History
 
 Editing creates an edit history revision with the pre-edit plaintext. This cannot be cleared via API.
+
+**The `notify` step already advises the author to delete and recreate (issues) or close and reopen (PRs) instead of relying on editing alone.** If the author does not act, maintainer should follow up.
 
 **Output to maintainer terminal only (never in public comments):**
 

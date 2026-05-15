@@ -558,6 +558,7 @@ function cmdNotify(target, author, locationType, secretTypes, replyToNodeId) {
 
   let locationDesc;
   let actionDesc;
+  let extraAdvice = "";
   if (
     locationType === "issue_comment" ||
     locationType === "pull_request_comment" ||
@@ -569,9 +570,15 @@ function cmdNotify(target, author, locationType, secretTypes, replyToNodeId) {
   } else if (locationType === "issue_body") {
     locationDesc = "your issue description";
     actionDesc = "The affected content has been redacted in place.";
+    extraAdvice =
+      "Editing an issue description does not remove the secret from its edit history. " +
+      "**We strongly recommend deleting this issue and recreating it** with the redacted content to ensure the secret is fully removed.";
   } else if (locationType === "pull_request_body") {
     locationDesc = "your pull request description";
     actionDesc = "The affected content has been redacted in place.";
+    extraAdvice =
+      "Editing a pull request description does not remove the secret from its edit history. " +
+      "**We strongly recommend closing this PR and opening a new one** with the redacted content to ensure the secret is fully removed.";
   } else if (locationType === "commit") {
     locationDesc = "code you committed";
     actionDesc = "";
@@ -590,6 +597,7 @@ function cmdNotify(target, author, locationType, secretTypes, replyToNodeId) {
     typeList,
     "",
     actionDesc,
+    ...(extraAdvice ? ["", extraAdvice] : []),
     "",
     "**Please rotate these credentials immediately.**",
     "",
