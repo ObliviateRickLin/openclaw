@@ -121,11 +121,25 @@ interfaces only when the platform needs behavior the builders cannot express.
       dmPolicy: string | undefined;
     };
 
+    type AcmeChannelConfig = {
+      token?: string;
+      allowFrom?: string[];
+      dmSecurity?: string;
+    };
+
+    function readChannelConfig(cfg: OpenClawConfig): AcmeChannelConfig {
+      return (
+        (cfg.channels as Record<string, AcmeChannelConfig | undefined>)?.[
+          "acme-chat"
+        ] ?? {}
+      );
+    }
+
     function resolveAccount(
       cfg: OpenClawConfig,
       accountId?: string | null,
     ): ResolvedAccount {
-      const section = (cfg.channels as Record<string, any>)?.["acme-chat"];
+      const section = readChannelConfig(cfg);
       const token = section?.token;
       if (!token) throw new Error("acme-chat: token is required");
       return {
@@ -139,15 +153,31 @@ interfaces only when the platform needs behavior the builders cannot express.
     export const acmeChatPlugin = createChatChannelPlugin<ResolvedAccount>({
       base: createChannelPluginBase({
         id: "acme-chat",
-        setup: {
+        config: {
+          listAccountIds(cfg) {
+            return readChannelConfig(cfg).token ? ["default"] : [];
+          },
           resolveAccount,
           inspectAccount(cfg, accountId) {
-            const section =
-              (cfg.channels as Record<string, any>)?.["acme-chat"];
+            const section = readChannelConfig(cfg);
             return {
               enabled: Boolean(section?.token),
               configured: Boolean(section?.token),
               tokenStatus: section?.token ? "available" : "missing",
+            };
+          },
+        },
+        setup: {
+          applyAccountConfig({ cfg, input }) {
+            return {
+              ...cfg,
+              channels: {
+                ...(cfg.channels as Record<string, unknown>),
+                "acme-chat": {
+                  ...readChannelConfig(cfg),
+                  token: String(input.token ?? ""),
+                },
+              },
             };
           },
         },
@@ -293,13 +323,13 @@ interfaces only when the platform needs behavior the builders cannot express.
             "acme-chat": { token: "test-token", allowFrom: ["user1"] },
           },
         } as any;
-        const account = acmeChatPlugin.setup!.resolveAccount(cfg, undefined);
+        const account = acmeChatPlugin.config.resolveAccount(cfg, undefined);
         expect(account.token).toBe("test-token");
       });
 
       it("inspects account without materializing secrets", () => {
         const cfg = { channels: { "acme-chat": { token: "test-token" } } } as any;
-        const result = acmeChatPlugin.setup!.inspectAccount!(cfg, undefined);
+        const result = acmeChatPlugin.config.inspectAccount!(cfg, undefined);
         expect(result.configured).toBe(true);
         expect(result.tokenStatus).toBe("available");
       });
