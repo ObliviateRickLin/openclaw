@@ -90,9 +90,7 @@ export function buildAgentHarnessUserInputAnswers(
   }
 
   const keyed = parseKeyedAnswers(inputText);
-  const fallbackLines = inputText
-    .split(/\r?\n/)
-    .map((line) => line.trim());
+  const fallbackLines = inputText.split(/\r?\n/).map((line) => line.trim());
   questions.forEach((question, index) => {
     const key =
       keyed.get(question.id.toLowerCase()) ??
@@ -130,7 +128,12 @@ export function normalizeAgentHarnessUserInputAnswer(
 function parseKeyedAnswers(inputText: string): Map<string, string> {
   const answers = new Map<string, string>();
   for (const line of inputText.split(/\r?\n/)) {
-    const match = line.match(/^\s*([^:=-]+?)\s*[:=-]\s*(.+?)\s*$/);
+    // A keyed answer separates the key from its value with whitespace, like
+    // "mode: deep" or "2: fast". Compact tokens such as "14:30", "https://x",
+    // "C:\\path", or "key=value" have no separating space, so they stay whole
+    // ordinary answers instead of being split at the first delimiter. "-" is
+    // not a delimiter: it is common inside answers and hyphenated keys.
+    const match = line.match(/^\s*([^:=]+?)\s*[:=]\s+(.+?)\s*$/);
     if (!match) {
       continue;
     }
