@@ -483,7 +483,9 @@ describe("createRealtimeTranscriptionWebSocketSession", () => {
     });
 
     await session.connect();
-    await new Promise((resolve) => setTimeout(resolve, 400));
+    await new Promise((resolve) => {
+      setTimeout(resolve, 400);
+    });
     session.close();
 
     // Each connection stays ready past the stable-reset window, so the budget never
