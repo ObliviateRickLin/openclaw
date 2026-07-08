@@ -234,6 +234,67 @@ describe("lobster plugin tool", () => {
     expect(mutation.applied).toBe(true);
   });
 
+  it("ignores a schema-default flowExpectedRevision on a managed run", async () => {
+    const runner = {
+      run: vi.fn().mockResolvedValue({
+        ok: true,
+        status: "ok",
+        output: [],
+        requiresApproval: null,
+      }),
+    };
+    const taskFlow = createFakeTaskFlow();
+    const tool = createLobsterTool(fakeApi(), { runner, taskFlow });
+
+    // The tool schema can inject flowExpectedRevision=0; a managed run must not
+    // be rejected with "run action does not accept flowExpectedRevision".
+    const res = await tool.execute("call-managed-run-injected-revision", {
+      action: "run",
+      pipeline: "noop",
+      flowControllerId: "tests/lobster",
+      flowGoal: "Run Lobster workflow",
+      flowExpectedRevision: 0,
+    });
+
+    expect(taskFlow.createManaged).toHaveBeenCalled();
+    const details = requireRecord(res.details, "managed run injected-revision details");
+    expect(details.ok).toBe(true);
+  });
+
+  // A schema-injected flowStateJson (blank "" or empty "{}") without
+  // controllerId/goal must not fail JSON parsing or select managed run parsing
+  // (would otherwise fail "flowControllerId required when using managed TaskFlow
+  // run mode" or "flowStateJson must be valid JSON").
+  it.each(["", "{}"])(
+    "routes run carrying only a schema-default flowStateJson %j as ordinary",
+    async (flowStateJson) => {
+      const runner = {
+        run: vi.fn().mockResolvedValue({
+          ok: true,
+          status: "ok",
+          output: [],
+          requiresApproval: null,
+        }),
+      };
+      const taskFlow = createFakeTaskFlow();
+      const tool = createLobsterTool(fakeApi(), { runner, taskFlow });
+
+      const res = await tool.execute("call-ordinary-run-injected-state", {
+        action: "run",
+        pipeline: "noop",
+        flowStateJson,
+        flowExpectedRevision: 0,
+      });
+
+      expect(taskFlow.createManaged).not.toHaveBeenCalled();
+      expect(runner.run).toHaveBeenCalledWith(
+        expect.objectContaining({ action: "run", pipeline: "noop" }),
+      );
+      const details = requireRecord(res.details, "ordinary run injected-state details");
+      expect(details.ok).toBe(true);
+    },
+  );
+
   it("rejects managed TaskFlow params when no bound taskFlow runtime is available", async () => {
     const tool = createLobsterTool(fakeApi(), {
       runner: { run: vi.fn() },
@@ -306,6 +367,35 @@ describe("lobster plugin tool", () => {
     expect(details.status).toBe("ok");
     const mutation = requireRecord(details.mutation, "managed resume mutation details");
     expect(mutation.applied).toBe(true);
+  });
+
+  it("routes resume carrying only a schema-default flowExpectedRevision as ordinary", async () => {
+    const runner = {
+      run: vi.fn().mockResolvedValue({
+        ok: true,
+        status: "ok",
+        output: [],
+        requiresApproval: null,
+      }),
+    };
+    const taskFlow = createFakeTaskFlow();
+    const tool = createLobsterTool(fakeApi(), { runner, taskFlow });
+
+    // flowExpectedRevision=0 is a tool-schema default; without a flowId this is
+    // an ordinary resume and must not be routed into managed TaskFlow mode.
+    const res = await tool.execute("call-ordinary-resume-injected-revision", {
+      action: "resume",
+      token: "resume-token",
+      approve: true,
+      flowExpectedRevision: 0,
+    });
+
+    expect(taskFlow.resume).not.toHaveBeenCalled();
+    expect(runner.run).toHaveBeenCalledWith(
+      expect.objectContaining({ action: "resume", token: "resume-token", approve: true }),
+    );
+    const envelope = requireRecord(res.details, "ordinary resume injected-revision details");
+    expect(envelope.ok).toBe(true);
   });
 
   it("normalizes numeric string flowExpectedRevision before managed resume", async () => {

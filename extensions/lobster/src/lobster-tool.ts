@@ -97,8 +97,15 @@ function parseOptionalFlowStateJson(value: unknown): JsonLike | undefined {
   if (typeof value !== "string") {
     throw new Error("flowStateJson must be a JSON string");
   }
+  // A blank/whitespace flowStateJson is a schema default, not a managed-run
+  // request; treat it as absent so it neither fails JSON parsing nor selects
+  // managed run mode on an ordinary call.
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return undefined;
+  }
   try {
-    return JSON.parse(value) as JsonLike;
+    return JSON.parse(trimmed) as JsonLike;
   } catch {
     throw new Error("flowStateJson must be valid JSON");
   }
@@ -111,20 +118,21 @@ function parseRunFlowParams(params: Record<string, unknown>): ManagedFlowRunPara
   const waitingStep = readOptionalTrimmedString(params.flowWaitingStep, "flowWaitingStep");
   const stateJson = parseOptionalFlowStateJson(params.flowStateJson);
   const resumeFlowId = readOptionalTrimmedString(params.flowId, "flowId");
-  const resumeRevision = readOptionalNumber(params.flowExpectedRevision, "flowExpectedRevision");
 
-  const hasRunFields =
-    controllerId !== undefined ||
-    goal !== undefined ||
-    currentStep !== undefined ||
-    waitingStep !== undefined ||
-    stateJson !== undefined;
+  // Managed run is identified by the intentional controllerId/goal fields. The
+  // step and flowStateJson fields can be injected as tool-schema defaults (e.g.
+  // an empty flowStateJson), so they must not route an ordinary run into
+  // managed TaskFlow mode.
+  const hasRunFields = controllerId !== undefined || goal !== undefined;
 
   if (!hasRunFields) {
     return null;
   }
-  if (resumeFlowId !== undefined || resumeRevision !== undefined) {
-    throw new Error("run action does not accept flowId or flowExpectedRevision");
+  // Only an explicit flowId means the caller confused resume with run.
+  // flowExpectedRevision is ignored here because the tool schema can inject a
+  // default (e.g. 0), which must not trip an ordinary managed run.
+  if (resumeFlowId !== undefined) {
+    throw new Error("run action does not accept flowId");
   }
   if (!controllerId) {
     throw new Error("flowControllerId required when using managed TaskFlow run mode");
@@ -153,20 +161,15 @@ function parseResumeFlowParams(params: Record<string, unknown>): ManagedFlowResu
   const runGoal = readOptionalTrimmedString(params.flowGoal, "flowGoal");
   const stateJson = params.flowStateJson;
 
-  const hasResumeFields =
-    flowId !== undefined ||
-    expectedRevision !== undefined ||
-    currentStep !== undefined ||
-    waitingStep !== undefined;
-
-  if (!hasResumeFields) {
+  // Managed resume is identified by flowId. flowExpectedRevision and step
+  // fields can be injected as tool-schema defaults (e.g. flowExpectedRevision
+  // 0), so on their own they must not route an ordinary resume into managed
+  // TaskFlow mode.
+  if (flowId === undefined) {
     return null;
   }
   if (runControllerId !== undefined || runGoal !== undefined || stateJson !== undefined) {
     throw new Error("resume action does not accept flowControllerId, flowGoal, or flowStateJson");
-  }
-  if (!flowId) {
-    throw new Error("flowId required when using managed TaskFlow resume mode");
   }
   if (expectedRevision === undefined) {
     throw new Error("flowExpectedRevision required when using managed TaskFlow resume mode");
