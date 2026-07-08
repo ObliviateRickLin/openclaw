@@ -34,7 +34,16 @@ export async function readQaJsonBody(req: IncomingMessage): Promise<unknown> {
       timeoutMs: QA_HTTP_JSON_BODY_TIMEOUT_MS,
     })
   ).trim();
-  return text ? (JSON.parse(text) as unknown) : {};
+  if (!text) {
+    return {};
+  }
+  try {
+    return JSON.parse(text) as unknown;
+  } catch {
+    // Surface a stable diagnostic rather than the raw JS parser text (position
+    // offsets etc.), matching the controlled bounded-body error behavior.
+    throw new Error("Malformed JSON request body");
+  }
 }
 
 export function writeJson(res: ServerResponse, statusCode: number, body: unknown) {

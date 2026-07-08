@@ -1,5 +1,6 @@
 // Qa Lab tests cover bus server plugin behavior.
 import { Agent, createServer, request } from "node:http";
+import { Readable } from "node:stream";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { closeQaHttpServer, handleQaBusRequest, startQaBusServer } from "./bus-server.js";
 import { createQaBusState } from "./bus-state.js";
@@ -248,5 +249,38 @@ describe("handleQaBusRequest", () => {
     expect(handled).toBe(true);
     expect(res.statusCode).toBe(413);
     expect(JSON.parse(res.body)).toEqual({ error: "Payload too large" });
+  });
+
+  it("returns a stable diagnostic when a v1 POST body is malformed JSON", async () => {
+    const req = Object.assign(Readable.from(["{"]), {
+      method: "POST",
+      url: "/v1/reset",
+      headers: {},
+      destroyed: false,
+      destroy() {
+        this.destroyed = true;
+      },
+    });
+    const res = {
+      statusCode: 0,
+      body: "",
+      writeHead(statusCode: number) {
+        this.statusCode = statusCode;
+      },
+      end(payload: string) {
+        this.body = payload;
+      },
+    };
+
+    const handled = await handleQaBusRequest({
+      req: req as never,
+      res: res as never,
+      state: createQaBusState(),
+    });
+
+    expect(handled).toBe(true);
+    expect(res.statusCode).toBe(400);
+    // Stable message, not the raw JS parser text (e.g. "Expected property name...").
+    expect(JSON.parse(res.body)).toEqual({ error: "Malformed JSON request body" });
   });
 });
