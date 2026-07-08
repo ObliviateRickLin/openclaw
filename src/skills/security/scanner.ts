@@ -157,6 +157,15 @@ type SourceRule = {
   requiresContext?: RegExp;
   /** If set, secondary context must be within this many lines of the primary match. */
   requiresContextWindowLines?: number;
+  /**
+   * When set, evaluate this rule against a source with single/double-quoted string
+   * *contents* blanked out. Use for rules that hunt for code constructs (a real
+   * `fetch(` call, `process.env` access) so they stop matching those same tokens
+   * when they only appear inside string literals — e.g. `fetch(` in an `it()`
+   * description. Rules that intentionally match string payloads (`obfuscated-code`
+   * hex/base64, `crypto-mining` URLs) must NOT set this. See #82469.
+   */
+  ignoreStringLiterals?: boolean;
 };
 
 const LINE_RULES: LineRule[] = [
@@ -197,6 +206,7 @@ const SOURCE_RULES: SourceRule[] = [
     message: "File read combined with network send — possible data exfiltration",
     pattern: /readFileSync|readFile/,
     requiresContext: NETWORK_SEND_CONTEXT_PATTERN,
+    ignoreStringLiterals: true,
   },
   {
     ruleId: "obfuscated-code",
@@ -218,6 +228,7 @@ const SOURCE_RULES: SourceRule[] = [
     pattern: /process\.env/,
     requiresContext: NETWORK_SEND_CONTEXT_PATTERN,
     requiresContextWindowLines: 8,
+    ignoreStringLiterals: true,
   },
 ];
 
@@ -292,7 +303,8 @@ function isBenignMemberExecMatch(line: string, match: RegExpExecArray): boolean 
   return !/\b(?:cp|childProcess|child_process)\s*\.\s*exec\s*\(/.test(line);
 }
 
-function stripCommentsForHeuristics(source: string): string {
+function stripCommentsForHeuristics(source: string, opts?: { maskStrings?: boolean }): string {
+  const maskStrings = opts?.maskStrings ?? false;
   let stripped = "";
   let quote: "'" | '"' | "`" | null = null;
   let escaped = false;
@@ -315,7 +327,17 @@ function stripCommentsForHeuristics(source: string): string {
     }
 
     if (quote) {
-      stripped += ch;
+      // In maskStrings mode, blank the *contents* of single/double-quoted strings
+      // (keep delimiters, newlines, and length so line/offset stay aligned) so that
+      // code-construct rules stop matching tokens that only live inside string
+      // literals. Backtick templates are left intact — their `${...}` holes can
+      // hold real code we still need to scan.
+      const isClosingQuote = !escaped && ch === quote;
+      if (maskStrings && quote !== "`" && !isClosingQuote) {
+        stripped += ch === "\n" ? "\n" : " ";
+      } else {
+        stripped += ch;
+      }
       if (escaped) {
         escaped = false;
       } else if (ch === "\\") {
@@ -395,6 +417,10 @@ export function scanSource(source: string, filePath: string): SkillScanFinding[]
   const lines = source.split("\n");
   const heuristicSource = stripCommentsForHeuristics(source);
   const heuristicLines = heuristicSource.split("\n");
+  // Same source with single/double-quoted string contents blanked, for rules that
+  // hunt for code constructs and should ignore tokens inside string literals (#82469).
+  const stringMaskedSource = stripCommentsForHeuristics(source, { maskStrings: true });
+  const stringMaskedLines = stringMaskedSource.split("\n");
   const matchedLineRules = new Set<string>();
 
   // --- Line rules ---
@@ -452,8 +478,8 @@ export function scanSource(source: string, filePath: string): SkillScanFinding[]
 
     const match = findSourceRuleMatch({
       rule,
-      source: heuristicSource,
-      lines: heuristicLines,
+      source: rule.ignoreStringLiterals ? stringMaskedSource : heuristicSource,
+      lines: rule.ignoreStringLiterals ? stringMaskedLines : heuristicLines,
     });
     if (!match) {
       continue;
