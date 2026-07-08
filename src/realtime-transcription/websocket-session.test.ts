@@ -20,9 +20,11 @@ afterEach(async () => {
 
 async function createRealtimeServer(params?: {
   closeOnConnection?: boolean;
+  closeAfterInitialMs?: number;
   initialEvent?: unknown;
   initialText?: string;
   onUpgrade?: (headers: Record<string, string | string[] | undefined>) => void;
+  onConnection?: () => void;
   onBinary?: (payload: Buffer) => void;
   onText?: (payload: unknown) => void;
 }) {
@@ -35,6 +37,7 @@ async function createRealtimeServer(params?: {
     wss.handleUpgrade(request, socket, head, (ws) => {
       clients.add(ws);
       ws.on("close", () => clients.delete(ws));
+      params?.onConnection?.();
       if (params?.closeOnConnection) {
         ws.close(1011, "setup failed");
         return;
@@ -44,6 +47,11 @@ async function createRealtimeServer(params?: {
       }
       if (params?.initialText) {
         ws.send(params.initialText);
+      }
+      if (params?.closeAfterInitialMs !== undefined) {
+        // Simulate a flapping (or, with a longer delay, a briefly-stable) upstream:
+        // reach ready via the initial event, then drop the socket.
+        setTimeout(() => ws.close(1011, "upstream flap"), params.closeAfterInitialMs);
       }
       ws.on("message", (data, isBinary) => {
         const buffer = Buffer.isBuffer(data)
@@ -402,5 +410,87 @@ describe("createRealtimeTranscriptionWebSocketSession", () => {
     const closeError = requireFirstMockArg(onError, "pre-ready close error");
     expect(closeError).toBeInstanceOf(Error);
     expect(closeError.message).toBe("test realtime transcription connection closed before ready");
+  });
+
+  it("gives up after the cap when a ready upstream keeps flapping (#102251)", async () => {
+    let connections = 0;
+    const limitReached = createSignal();
+    const onError = vi.fn((error: Error) => {
+      if (error.message.includes("reconnect limit reached")) {
+        limitReached.resolve();
+      }
+    });
+    const server = await createRealtimeServer({
+      initialEvent: { type: "ready" },
+      closeAfterInitialMs: 0, // reach ready, then drop immediately — a flap
+      onConnection: () => {
+        connections += 1;
+      },
+    });
+    const session = createRealtimeTranscriptionWebSocketSession<{ type?: string }>({
+      providerId: "test",
+      callbacks: { onError },
+      url: server.url,
+      maxReconnectAttempts: 5,
+      reconnectDelayMs: 15,
+      reconnectStableResetMs: 10_000, // flaps never reach "stable", so attempts accrue
+      reconnectLimitMessage: "test realtime transcription reconnect limit reached",
+      onMessage: (event, transport) => {
+        if (event.type === "ready") {
+          transport.markReady();
+        }
+      },
+      sendAudio: () => {},
+    });
+
+    await session.connect();
+    await limitReached.promise;
+    session.close();
+
+    // Initial connection + exactly maxReconnectAttempts reconnects, then it stops.
+    // Before the fix the open handler zeroed the counter every reconnect, so the cap
+    // was never reached and this stream was unbounded.
+    expect(connections).toBe(6);
+    expect(
+      onError.mock.calls.some(([error]) => error.message.includes("reconnect limit reached")),
+    ).toBe(true);
+  });
+
+  it("resets the reconnect budget after a connection stays stably ready (#102251)", async () => {
+    let connections = 0;
+    const onError = vi.fn();
+    const server = await createRealtimeServer({
+      initialEvent: { type: "ready" },
+      closeAfterInitialMs: 60, // ready, stays past the stable-reset window, then drops
+      onConnection: () => {
+        connections += 1;
+      },
+    });
+    const session = createRealtimeTranscriptionWebSocketSession<{ type?: string }>({
+      providerId: "test",
+      callbacks: { onError },
+      url: server.url,
+      maxReconnectAttempts: 3,
+      reconnectDelayMs: 10,
+      reconnectStableResetMs: 30, // 60ms ready > 30ms window => each drop is a recovery
+      reconnectLimitMessage: "test realtime transcription reconnect limit reached",
+      onMessage: (event, transport) => {
+        if (event.type === "ready") {
+          transport.markReady();
+        }
+      },
+      sendAudio: () => {},
+    });
+
+    await session.connect();
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    session.close();
+
+    // Each connection stays ready past the stable-reset window, so the budget never
+    // exhausts: it keeps recovering well past maxReconnectAttempts with no give-up.
+    expect(connections).toBeGreaterThan(4);
+    expect(
+      onError.mock.calls.some(([error]) => error.message.includes("reconnect limit reached")),
+    ).toBe(false);
   });
 });

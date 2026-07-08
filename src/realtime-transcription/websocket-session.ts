@@ -41,6 +41,8 @@ export type RealtimeTranscriptionWebSocketSessionOptions<Event = unknown> = {
   readyOnOpen?: boolean;
   reconnectDelayMs?: number;
   reconnectLimitMessage?: string;
+  /** How long a connection must stay ready before its next drop resets the backoff. */
+  reconnectStableResetMs?: number;
   sendAudio: (audio: Buffer, transport: RealtimeTranscriptionWebSocketTransport) => void;
   url: string | (() => string | Promise<string>);
 };
@@ -50,6 +52,10 @@ const DEFAULT_CLOSE_TIMEOUT_MS = 5_000;
 const DEFAULT_MAX_RECONNECT_ATTEMPTS = 5;
 const DEFAULT_RECONNECT_DELAY_MS = 1000;
 const DEFAULT_MAX_QUEUED_BYTES = 2 * 1024 * 1024;
+// A connection that stays ready at least this long is treated as a genuine
+// recovery, so its next drop starts a fresh backoff/give-up sequence. A shorter
+// ready window is a flap and keeps accumulating attempts toward the cap.
+const DEFAULT_RECONNECT_STABLE_RESET_MS = 10_000;
 
 function rawWsDataToBuffer(data: RawData): Buffer {
   if (Buffer.isBuffer(data)) {
@@ -78,6 +84,11 @@ class WebSocketRealtimeTranscriptionSession<Event> implements RealtimeTranscript
   private queuedBytes = 0;
   private ready = false;
   private reconnectAttempts = 0;
+  // Timestamp (ms) at which the current connection last became ready, or 0 when not
+  // ready. Read on disconnect to decide whether the connection was stable enough to
+  // reset the reconnect counter, so a flapping-after-ready upstream still hits the
+  // give-up cap and backoff instead of resetting on every raw open. See #102251.
+  private lastReadyAtMs = 0;
   private reconnecting = false;
   private suppressReconnect = false;
   private ws: WebSocket | null = null;
@@ -166,9 +177,16 @@ class WebSocketRealtimeTranscriptionSession<Event> implements RealtimeTranscript
     return this.options.reconnectDelayMs ?? DEFAULT_RECONNECT_DELAY_MS;
   }
 
+  private get reconnectStableResetMs(): number {
+    return this.options.reconnectStableResetMs ?? DEFAULT_RECONNECT_STABLE_RESET_MS;
+  }
+
   private async doConnect(): Promise<void> {
     await new Promise<void>((resolve, reject) => {
       this.ready = false;
+      // Each attempt starts not-ready; the stable-ready clock only starts once this
+      // connection reaches ready, so a drop before then cannot look "stable".
+      this.lastReadyAtMs = 0;
       const debugProxy = resolveDebugProxySettings();
       const proxyAgent = createDebugProxyWebSocketAgent(debugProxy);
       let settled = false;
@@ -201,6 +219,7 @@ class WebSocketRealtimeTranscriptionSession<Event> implements RealtimeTranscript
         settled = true;
         clearConnectTimeout();
         this.ready = true;
+        this.lastReadyAtMs = Date.now();
         this.flushQueuedAudio();
         resolve();
       };
@@ -259,7 +278,10 @@ class WebSocketRealtimeTranscriptionSession<Event> implements RealtimeTranscript
         this.ws.on("open", () => {
           opened = true;
           this.connected = true;
-          this.reconnectAttempts = 0;
+          // NB: do NOT reset reconnectAttempts here. A raw TCP open (even one that
+          // immediately drops) must not clear the counter, or a flapping-after-ready
+          // upstream reconnects forever. The counter is reset only after a connection
+          // stays stably ready (see attemptReconnect). See #102251.
           this.captureLocalOpen();
           try {
             this.options.onOpen?.(this.transport);
@@ -342,6 +364,12 @@ class WebSocketRealtimeTranscriptionSession<Event> implements RealtimeTranscript
   private async attemptReconnect(): Promise<void> {
     if (this.closed || this.reconnecting) {
       return;
+    }
+    // If the connection that just dropped had been stably ready, treat it as a
+    // recovery and start a fresh backoff/give-up sequence. A flap (ready then a
+    // quick drop) falls short of the window and keeps accumulating toward the cap.
+    if (this.lastReadyAtMs > 0 && Date.now() - this.lastReadyAtMs >= this.reconnectStableResetMs) {
+      this.reconnectAttempts = 0;
     }
     if (this.reconnectAttempts >= this.maxReconnectAttempts) {
       this.emitError(
