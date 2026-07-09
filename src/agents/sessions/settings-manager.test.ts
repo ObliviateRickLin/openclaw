@@ -46,4 +46,22 @@ describe("SettingsManager runtime overrides", () => {
     expect(settingsManager.getPackages()).toEqual(["npm:@openclaw/example"]);
     expect(settingsManager.getCompactionReserveTokens()).toBe(50_000);
   });
+
+  it("preserves sibling retry.provider fields when a higher scope sets only one (#102318)", () => {
+    const settingsManager = SettingsManager.inMemory({
+      retry: { provider: { timeoutMs: 30_000, maxRetries: 5 } },
+    });
+
+    // A higher-precedence scope that sets only one nested field must not erase the
+    // siblings; a shallow merge dropped timeoutMs/maxRetries back to SDK defaults.
+    settingsManager.applyOverrides({
+      retry: { provider: { maxRetryDelayMs: 1_000 } },
+    });
+
+    expect(settingsManager.getProviderRetrySettings()).toEqual({
+      timeoutMs: 30_000,
+      maxRetries: 5,
+      maxRetryDelayMs: 1_000,
+    });
+  });
 });

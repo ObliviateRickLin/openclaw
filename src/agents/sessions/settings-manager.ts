@@ -122,34 +122,42 @@ export interface Settings {
 }
 
 /** Deep merge settings: project/overrides take precedence, nested objects merge recursively */
-function deepMergeSettings(base: Settings, overrides: Settings): Settings {
-  const result: Settings = { ...base };
+function isMergeablePlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
 
-  for (const key of Object.keys(overrides) as (keyof Settings)[]) {
+// Recursively merges plain objects so nested fields set in different scopes combine
+// instead of an override's nested object wholesale-replacing the base's. A shallow
+// merge here silently drops sibling fields set in a lower-precedence scope — e.g. a
+// project scope that sets only `retry.provider.maxRetryDelayMs` would erase the global
+// `retry.provider.timeoutMs`/`maxRetries`, reverting them to SDK defaults (#102318).
+// Arrays and primitives are replaced (override wins), matching prior behavior.
+function deepMergePlainObjects(
+  base: Record<string, unknown>,
+  overrides: Record<string, unknown>,
+): Record<string, unknown> {
+  const result: Record<string, unknown> = { ...base };
+
+  for (const key of Object.keys(overrides)) {
     const overrideValue = overrides[key];
-    const baseValue = base[key];
-
     if (overrideValue === undefined) {
       continue;
     }
-
-    // For nested objects, merge recursively
-    if (
-      typeof overrideValue === "object" &&
-      overrideValue !== null &&
-      !Array.isArray(overrideValue) &&
-      typeof baseValue === "object" &&
-      baseValue !== null &&
-      !Array.isArray(baseValue)
-    ) {
-      (result as Record<string, unknown>)[key] = { ...baseValue, ...overrideValue };
-    } else {
-      // For primitives and arrays, override value wins
-      (result as Record<string, unknown>)[key] = overrideValue;
-    }
+    const baseValue = base[key];
+    result[key] =
+      isMergeablePlainObject(overrideValue) && isMergeablePlainObject(baseValue)
+        ? deepMergePlainObjects(baseValue, overrideValue)
+        : overrideValue;
   }
 
   return result;
+}
+
+function deepMergeSettings(base: Settings, overrides: Settings): Settings {
+  return deepMergePlainObjects(
+    base as Record<string, unknown>,
+    overrides as Record<string, unknown>,
+  ) as Settings;
 }
 
 export type SettingsScope = "global" | "project";
