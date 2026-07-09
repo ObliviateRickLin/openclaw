@@ -1886,6 +1886,45 @@ Second paragraph should still reach the agent after Slack's preview cutoff.`;
     expect(prepared.ctxPayload.From).toBe("slack:group:G123");
   });
 
+  it("keeps one mpDM classification when a later event omits channel_type (#102676)", async () => {
+    // Modern mpDMs are C-prefixed. Human-authored messages carry channel_type: "mpim",
+    // but bot-authored ingress shapes omit it; simulate the channel-info fill failing
+    // (e.g. missing mpim:read scope) so the only remaining signal on main is C-prefix
+    // inference, which mis-keys a second slack:channel:<id> session for the same room.
+    const ctx = createReplyToAllSlackCtx();
+    ctx.resolveChannelName = async () => ({});
+    const account = createSlackAccount({ replyToMode: "all" });
+
+    const humanPrepared = await prepareMessageWith(
+      ctx,
+      account,
+      createSlackMessage({
+        channel: "C0MPDM42",
+        channel_type: "mpim",
+        user: "U1",
+        text: "hello from a human",
+      }),
+    );
+    assertPrepared(humanPrepared);
+    expect(humanPrepared.ctxPayload.ChatType).toBe("group");
+    expect(humanPrepared.ctxPayload.From).toBe("slack:group:C0MPDM42");
+
+    const typelessPrepared = await prepareMessageWith(
+      ctx,
+      account,
+      createSlackMessage({
+        channel: "C0MPDM42",
+        channel_type: undefined,
+        user: "U2",
+        text: "same room, ingress shape without channel_type",
+        ts: "2.000",
+      }),
+    );
+    assertPrepared(typelessPrepared);
+    expect(typelessPrepared.ctxPayload.ChatType).toBe("group");
+    expect(typelessPrepared.ctxPayload.From).toBe("slack:group:C0MPDM42");
+  });
+
   it.each([
     {
       peer: { kind: "group", id: "channel:C0AJUGWG5L6" },
@@ -4196,6 +4235,8 @@ describe("prepareSlackMessage sender prefix", () => {
       resolveSlackSystemEventSessionKey: () => "agent:main:slack:channel:c1",
       isChannelAllowed: () => true,
       resolveChannelName: async () => ({ name: "general", type: "channel" }),
+      rememberSlackChannelType: () => {},
+      recallSlackChannelType: () => undefined,
       resolveUserName: async () => ({ name: "Alice" }),
       setSlackThreadStatus: async () => undefined,
     } as unknown as SlackMonitorContext;

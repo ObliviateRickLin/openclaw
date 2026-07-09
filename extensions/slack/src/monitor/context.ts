@@ -170,6 +170,15 @@ export type SlackMonitorContext = {
     topic?: string;
     purpose?: string;
   }>;
+  /** Records an explicit channel_type seen on an event, keyed by channel id (#102676). */
+  rememberSlackChannelType: (
+    channelId: string | null | undefined,
+    channelType: string | null | undefined,
+  ) => void;
+  /** Returns a previously seen explicit channel_type for the channel, if any. */
+  recallSlackChannelType: (
+    channelId: string | null | undefined,
+  ) => SlackMessageEvent["channel_type"] | undefined;
   resolveUserName: (userId: string, eventScope?: SlackEventScope) => Promise<{ name?: string }>;
   setSlackThreadStatus: (params: {
     channelId: string;
@@ -253,6 +262,38 @@ export function createSlackMonitorContext(params: {
     }
   >();
   const userCache = new Map<string, { name?: string }>();
+  // Explicit channel_type values already seen on events for a channel. Human-authored
+  // mpDM messages carry channel_type: "mpim", but bot-authored ingress shapes omit it;
+  // when the conversations.info fill also cannot resolve the type, C-prefix inference
+  // would fall back to "channel" and key a second, parallel session for the same room
+  // (#102676). Remembering event-carried types keeps every ingress path on one
+  // classification without any extra network lookups.
+  const knownChannelTypes = new Map<string, SlackMessageEvent["channel_type"]>();
+
+  const rememberSlackChannelType = (
+    channelId: string | null | undefined,
+    channelType: string | null | undefined,
+  ) => {
+    const id = normalizeOptionalString(channelId);
+    if (!id) {
+      return;
+    }
+    if (
+      channelType === "im" ||
+      channelType === "mpim" ||
+      channelType === "channel" ||
+      channelType === "group"
+    ) {
+      knownChannelTypes.set(id, channelType);
+    }
+  };
+
+  const recallSlackChannelType = (
+    channelId: string | null | undefined,
+  ): SlackMessageEvent["channel_type"] | undefined => {
+    const id = normalizeOptionalString(channelId);
+    return id ? knownChannelTypes.get(id) : undefined;
+  };
   const seenMessages = createDedupeCache({ ttlMs: 60_000, maxSize: 500 });
   const assistantThreadContexts = new Map<string, SlackAssistantThreadContext>();
   let lastAssistantContextCleanupAt = Date.now();
@@ -350,7 +391,12 @@ export function createSlackMonitorContext(params: {
   }) => {
     const channelId = normalizeOptionalString(p.channelId) ?? "";
     const senderId = normalizeOptionalString(p.senderId) ?? "";
-    const channelType = normalizeSlackChannelType(p.channelType, channelId);
+    // System events can omit channel_type too; prefer a type already seen on events
+    // for this channel over C-prefix inference so they key the same session (#102676).
+    const channelType = normalizeSlackChannelType(
+      p.channelType ?? recallSlackChannelType(channelId),
+      channelId,
+    );
     const isDirectMessage = channelType === "im";
     if (!channelId && (!isDirectMessage || !senderId)) {
       return params.mainKey;
@@ -691,6 +737,8 @@ export function createSlackMonitorContext(params: {
     resolveSlackSystemEventSessionKey,
     isChannelAllowed,
     resolveChannelName,
+    rememberSlackChannelType,
+    recallSlackChannelType,
     resolveUserName,
     setSlackThreadStatus,
     getSlackAssistantThreadContext,
