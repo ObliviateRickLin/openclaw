@@ -87,7 +87,7 @@ export type AgentConfig = {
   workspace?: string;
   agentDir?: string;
   model?: AgentModelConfig;
-  /** Optional per-agent model for short internal tasks such as generated session titles. */
+  /** Optional per-agent model for short internal tasks such as generated session titles and approval-intent classification. */
   utilityModel?: string;
   /**
    * @deprecated Legacy raw config accepted only by doctor/migration repair.

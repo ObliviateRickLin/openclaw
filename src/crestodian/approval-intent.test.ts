@@ -70,6 +70,17 @@ describe("classifyCrestodianApprovalIntent", () => {
     expect(deps.completeWithPreparedSimpleCompletionModel).toHaveBeenCalledOnce();
   });
 
+  it("classifies on the configured utility model, not the flagship (#102360)", async () => {
+    const deps = completionDeps("approve");
+    await classifyCrestodianApprovalIntent(
+      { message: "alright, ship that change", proposal: "set config gateway.port to 19001" },
+      deps,
+    );
+    expect(deps.prepareSimpleCompletionModelForAgent).toHaveBeenCalledWith(
+      expect.objectContaining({ useUtilityModel: true }),
+    );
+  });
+
   it("fails closed to other on unexpected model output", async () => {
     const deps = completionDeps("I think the user probably agrees");
     await expect(

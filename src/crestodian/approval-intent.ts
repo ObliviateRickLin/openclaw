@@ -102,6 +102,10 @@ export async function classifyCrestodianApprovalIntent(
       cfg,
       agentId: resolveDefaultAgentId(cfg),
       allowMissingApiKeyModes: ["aws-sdk"],
+      // A one-word approve/decline/other classification is bounded utility work: run
+      // it on the configured utilityModel like the rest of the simple-completion
+      // family, not the agent's flagship model. See #102360.
+      useUtilityModel: true,
     });
     if ("error" in prepared) {
       return "other";
