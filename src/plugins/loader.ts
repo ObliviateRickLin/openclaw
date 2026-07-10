@@ -398,14 +398,29 @@ export function clearPluginLoaderCache(): void {
 export function clearPluginCachesForInProcessRestart(): void {
   clearPluginLoaderCache();
   clearPluginManifestLoadCache();
+  const pluginModuleRoots = new Set<string>();
   for (const modulePath of importedPluginModulePathsForRestart) {
     try {
-      delete requireForPluginRestartCacheBust.cache[
-        requireForPluginRestartCacheBust.resolve(modulePath)
-      ];
+      const resolved = requireForPluginRestartCacheBust.resolve(modulePath);
+      delete requireForPluginRestartCacheBust.cache[resolved];
+      pluginModuleRoots.add(path.dirname(resolved) + path.sep);
     } catch {
       // Best-effort: TS entrypoints resolve through jiti (per-load instances), and
       // removed files simply have nothing to purge.
+    }
+  }
+  // Also evict plugin-LOCAL modules the entrypoints pulled in (e.g. a helper.cjs
+  // beside the entry): a fresh entrypoint must not receive stale exports from its
+  // previously cached local dependency graph. Bounding eviction to the plugin
+  // directories keeps shared OpenClaw and third-party singletons untouched.
+  if (pluginModuleRoots.size > 0) {
+    for (const cachedPath of Object.keys(requireForPluginRestartCacheBust.cache)) {
+      for (const root of pluginModuleRoots) {
+        if (cachedPath.startsWith(root)) {
+          delete requireForPluginRestartCacheBust.cache[cachedPath];
+          break;
+        }
+      }
     }
   }
   importedPluginModulePathsForRestart.clear();

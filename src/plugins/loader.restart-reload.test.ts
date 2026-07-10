@@ -33,12 +33,12 @@ function pluginBody(toolName: string): string {
 };`;
 }
 
-function writeManifest(dir: string, toolName: string): void {
+function writeManifest(dir: string, toolName: string, id = "restart-reload-probe"): void {
   fs.writeFileSync(
     path.join(dir, "openclaw.plugin.json"),
     JSON.stringify(
       {
-        id: "restart-reload-probe",
+        id,
         configSchema: { type: "object", additionalProperties: false },
         contracts: { tools: [toolName] },
       },
@@ -89,5 +89,43 @@ describe("plugin loader in-process restart reload", () => {
     const reloaded = loadOpenClawPlugins({ config });
     expect(loadedToolNames(reloaded)).toContain("probe_tool_v2");
     expect(loadedToolNames(reloaded)).not.toContain("probe_tool_v1");
+  });
+
+  it("reloads plugin-local imported modules, not just the entrypoint (#103688 review)", () => {
+    useNoBundledPlugins();
+    const plugin = writePlugin({
+      id: "restart-local-dep-probe",
+      filename: "restart-local-dep-probe.cjs",
+      body: `module.exports = {
+  id: "restart-local-dep-probe",
+  register(api) {
+    const helper = require("./helper.cjs");
+    api.registerTool({
+      name: helper.toolName,
+      description: "restart reload probe tool",
+      parameters: {},
+      execute: async () => ({ content: [{ type: "text", text: "ok" }] }),
+    });
+  },
+};`,
+    });
+    const helperPath = path.join(plugin.dir, "helper.cjs");
+    fs.writeFileSync(helperPath, 'module.exports = { toolName: "helper_tool_v1" };', "utf-8");
+    writeManifest(plugin.dir, "helper_tool_v1", "restart-local-dep-probe");
+    const config = {
+      plugins: { load: { paths: [plugin.file] }, allow: ["restart-local-dep-probe"] },
+    };
+
+    expect(loadedToolNames(loadOpenClawPlugins({ config }))).toContain("helper_tool_v1");
+
+    // Edit only the plugin-LOCAL dependency; a fresh entrypoint must not be paired
+    // with this stale cached helper (the mixed-runtime hazard).
+    fs.writeFileSync(helperPath, 'module.exports = { toolName: "helper_tool_v2" };', "utf-8");
+    writeManifest(plugin.dir, "helper_tool_v2", "restart-local-dep-probe");
+
+    clearPluginCachesForInProcessRestart();
+    const reloaded = loadOpenClawPlugins({ config });
+    expect(loadedToolNames(reloaded)).toContain("helper_tool_v2");
+    expect(loadedToolNames(reloaded)).not.toContain("helper_tool_v1");
   });
 });
