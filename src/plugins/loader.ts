@@ -1,6 +1,7 @@
 // Discovers, validates, and loads plugin metadata and runtime entrypoints.
 import { createHash } from "node:crypto";
 import fs from "node:fs";
+import { createRequire } from "node:module";
 import path from "node:path";
 import { err as resultError, ok, type Result } from "@openclaw/normalization-core/result";
 import { normalizeLowercaseStringOrEmpty } from "@openclaw/normalization-core/string-coerce";
@@ -85,8 +86,19 @@ import {
   type PluginManifestRegistry,
 } from "./manifest-registry.js";
 import type { PluginDiagnostic } from "./manifest-types.js";
-import { clearMemoryEmbeddingProviders } from "./memory-embedding-providers.js";
-import { clearMemoryPluginState } from "./memory-state.js";
+import { clearPluginManifestLoadCache } from "./manifest.js";
+import {
+  clearMemoryEmbeddingProviders,
+  listRegisteredMemoryEmbeddingProviders,
+  restoreRegisteredMemoryEmbeddingProviders,
+} from "./memory-embedding-providers.js";
+import {
+  clearMemoryPluginState,
+  getMemoryCapabilityRegistration,
+  listMemoryCorpusSupplements,
+  listMemoryPromptSupplements,
+  restoreMemoryPluginState,
+} from "./memory-state.js";
 import { unwrapDefaultModuleExport } from "./module-export.js";
 import {
   fingerprintPluginDiscoveryContext,
@@ -328,6 +340,11 @@ class PluginLoadFailureError extends Error {
 
 const { scoped: pluginLoaderCacheState, fullWorkspace: fullWorkspacePluginLoaderCacheState } =
   pluginLoaderCacheInstances;
+// Plugin entrypoints imported this process-lifetime; native-required JS lands in
+// Node's shared require.cache, which must be purged at the in-process restart
+// boundary or reloads re-serve stale module exports (#103571).
+const importedPluginModulePathsForRestart = new Set<string>();
+const requireForPluginRestartCacheBust = createRequire(import.meta.url);
 const LAZY_RUNTIME_REFLECTION_KEYS = [
   "version",
   "gateway",
@@ -365,6 +382,35 @@ function createPluginCandidatesFromManifestRegistry(
     ...(record.packageManifest !== undefined ? { packageManifest: record.packageManifest } : {}),
   }));
 }
+export function clearPluginLoaderCache(): void {
+  pluginLoaderCacheState.clear();
+  fullWorkspacePluginLoaderCacheState.clear();
+  clearActivatedPluginRuntimeState();
+}
+
+/**
+ * Drops cached plugin registries, activated runtime state, and manifest reads at the
+ * in-process gateway restart boundary (SIGUSR1 / `gateway restart --safe`). Restart is
+ * the explicit reload moment for process-stable plugin state: without this, the next
+ * startup re-runs `register()` from the cached module graph and logs "registered"
+ * while updated workspace plugin source on disk never loads (#103571).
+ */
+export function clearPluginCachesForInProcessRestart(): void {
+  clearPluginLoaderCache();
+  clearPluginManifestLoadCache();
+  for (const modulePath of importedPluginModulePathsForRestart) {
+    try {
+      delete requireForPluginRestartCacheBust.cache[
+        requireForPluginRestartCacheBust.resolve(modulePath)
+      ];
+    } catch {
+      // Best-effort: TS entrypoints resolve through jiti (per-load instances), and
+      // removed files simply have nothing to purge.
+    }
+  }
+  importedPluginModulePathsForRestart.clear();
+}
+
 export function clearActivatedPluginRuntimeState(): void {
   clearAgentHarnesses();
   clearPluginCommands();
@@ -470,8 +516,10 @@ function createPluginModuleLoader(options: {
       pluginSdkResolution: options.pluginSdkResolution,
     });
   };
-  return (modulePath: string): unknown =>
-    createLoaderForModule(modulePath)(toSafeImportPath(modulePath));
+  return (modulePath: string): unknown => {
+    importedPluginModulePathsForRestart.add(modulePath);
+    return createLoaderForModule(modulePath)(toSafeImportPath(modulePath));
+  };
 }
 
 function formatPluginRuntimeModuleResolutionError(params: {
