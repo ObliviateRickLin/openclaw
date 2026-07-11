@@ -803,11 +803,8 @@ export function applyJobResult(
     job.state.lastFailureAlertAtMs = undefined;
   }
 
-  // deleteAfterRun finalizes every one-shot schedule kind. On-exit jobs are
-  // durably disabled BEFORE their payload fires (gateway watcher replay
-  // protection), so successful deletion here is the terminal transition that
-  // actually removes them; restricting it to "at" left them behind as
-  // disabled jobs (#104518).
+  // The gateway watcher disables on-exit jobs before firing; successful removal here
+  // completes the same deleteAfterRun contract as a one-shot at schedule.
   const isOneShotSchedule = job.schedule.kind === "at" || job.schedule.kind === "on-exit";
   const shouldDelete = isOneShotSchedule && job.deleteAfterRun === true && result.status === "ok";
   const retryDisabledHeartbeatOneShot = shouldRetryDisabledHeartbeatOneShot(job, result);

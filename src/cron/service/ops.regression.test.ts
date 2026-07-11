@@ -22,7 +22,7 @@ import {
   tryBeginGatewayRootWorkAdmission,
 } from "../../process/gateway-work-admission.js";
 import { CommandLane } from "../../process/lanes.js";
-import { saveCronStore } from "../store.js";
+import { loadCronStore, saveCronStore } from "../store.js";
 import { enqueueRun, remove, run, start } from "./ops.js";
 import type { CronEvent } from "./state.js";
 import { createCronServiceState } from "./state.js";
@@ -795,70 +795,74 @@ describe("cron service ops regressions", () => {
 
     clearCommandLane(CommandLane.Cron);
   });
-  it("#104518: deletes a successful on-exit deleteAfterRun job instead of retaining it disabled", async () => {
-    const runScenario = async (params: {
-      id: string;
-      deleteAfterRun: boolean;
-      runStatus: "ok" | "error";
-    }) => {
-      const store = opsRegressionFixtures.makeStorePath();
-      const nowMs = Date.now();
-      const job = createIsolatedRegressionJob({
-        id: params.id,
-        name: params.id,
-        scheduledAt: nowMs,
-        schedule: { kind: "on-exit", command: 'sh -c "exit 0"' },
-        payload: { kind: "agentTurn", message: "post-exit payload" },
-        state: {},
-      });
-      job.deleteAfterRun = params.deleteAfterRun;
-      // The gateway exit watcher durably disables the job BEFORE firing
-      // (replay protection); the fire itself is a force run on the disabled
-      // job, mirrored here.
-      job.enabled = false;
-      await saveCronStore(store.storePath, { version: 1, jobs: [job] });
-
-      const state = createCronServiceState({
-        cronEnabled: false,
-        storePath: store.storePath,
-        log: noopLogger,
-        enqueueSystemEvent: vi.fn(),
-        requestHeartbeat: vi.fn(),
-        runIsolatedAgentJob:
-          params.runStatus === "ok"
-            ? vi.fn().mockResolvedValue({ status: "ok", summary: "ok" })
-            : vi.fn().mockResolvedValue({ status: "error", error: "boom" }),
-      });
-      const result = await run(state, params.id, "force");
-      expect(result).toEqual({ ok: true, ran: true });
-      return state.store?.jobs.find((entry) => entry.id === params.id);
-    };
-
-    // Successful deleteAfterRun on-exit job: deleted, like one-shot "at" jobs.
-    const deleted = await runScenario({
+  it.each([
+    {
       id: "onexit-delete-ok",
       deleteAfterRun: true,
-      runStatus: "ok",
-    });
-    expect(deleted).toBeUndefined();
-
-    // Without deleteAfterRun the job stays, durably disabled by the pre-fire
-    // transition (persistence-order contract unchanged).
-    const retained = await runScenario({
+      runStatus: "ok" as const,
+      expectedJob: undefined,
+      expectedActions: ["started", "finished", "removed"],
+    },
+    {
       id: "onexit-keep-ok",
       deleteAfterRun: false,
-      runStatus: "ok",
-    });
-    expect(retained?.enabled).toBe(false);
-    expect(retained?.state.lastStatus).toBe("ok");
-
-    // Failed runs are retained for inspection even with deleteAfterRun.
-    const failed = await runScenario({
+      runStatus: "ok" as const,
+      expectedJob: { enabled: false, lastStatus: "ok" },
+      expectedActions: ["started", "finished"],
+    },
+    {
       id: "onexit-delete-error",
       deleteAfterRun: true,
-      runStatus: "error",
+      runStatus: "error" as const,
+      expectedJob: { enabled: false, lastStatus: "error" },
+      expectedActions: ["started", "finished"],
+    },
+  ])("#104518 finalizes watcher-fired on-exit job: $id", async (params) => {
+    const store = opsRegressionFixtures.makeStorePath();
+    const nowMs = Date.now();
+    const job = createIsolatedRegressionJob({
+      id: params.id,
+      name: params.id,
+      scheduledAt: nowMs,
+      schedule: { kind: "on-exit", command: 'sh -c "exit 0"' },
+      payload: { kind: "agentTurn", message: "post-exit payload" },
+      state: {},
     });
-    expect(failed?.enabled).toBe(false);
-    expect(failed?.state.lastStatus).toBe("error");
+    job.deleteAfterRun = params.deleteAfterRun;
+    // The gateway watcher persists this disable before force-running the payload.
+    job.enabled = false;
+    await saveCronStore(store.storePath, { version: 1, jobs: [job] });
+
+    const events: CronEvent[] = [];
+    const state = createCronServiceState({
+      cronEnabled: false,
+      storePath: store.storePath,
+      log: noopLogger,
+      enqueueSystemEvent: vi.fn(),
+      requestHeartbeat: vi.fn(),
+      runIsolatedAgentJob:
+        params.runStatus === "ok"
+          ? vi.fn().mockResolvedValue({ status: "ok", summary: "ok" })
+          : vi.fn().mockResolvedValue({ status: "error", error: "boom" }),
+      onEvent: (event) => events.push(event),
+    });
+    await expect(run(state, params.id, "force")).resolves.toEqual({ ok: true, ran: true });
+
+    const memoryJob = state.store?.jobs.find((entry) => entry.id === params.id);
+    const durableJob = (await loadCronStore(store.storePath)).jobs.find(
+      (entry) => entry.id === params.id,
+    );
+    if (params.expectedJob) {
+      for (const persistedJob of [memoryJob, durableJob]) {
+        expect(persistedJob).toMatchObject({
+          enabled: params.expectedJob.enabled,
+          state: { lastStatus: params.expectedJob.lastStatus },
+        });
+      }
+    } else {
+      expect(memoryJob).toBeUndefined();
+      expect(durableJob).toBeUndefined();
+    }
+    expect(events.map((event) => event.action)).toEqual(params.expectedActions);
   });
 });
