@@ -198,6 +198,56 @@ describe("plugin loader in-process restart reload", () => {
     expect(loadedToolNames(reloaded)).not.toContain("nested_tool_v1");
   });
 
+  it("reloads edited TypeScript plugin source after the restart-boundary clear (#103688 review)", () => {
+    useNoBundledPlugins();
+    // TypeScript entrypoints load through jiti, which registers transformed
+    // modules in Node's CJS cache under their .ts source paths — the native-JS
+    // eviction never matches them by extension.
+    const root = path.join(makeTempDir(), "ts-restart-probe");
+    fs.mkdirSync(root, { recursive: true });
+    const tsBody = (toolName: string) => `const plugin = {
+  id: "ts-restart-probe",
+  register(api: { registerTool: (tool: object) => void }) {
+    const toolName: string = ${JSON.stringify(toolName)};
+    api.registerTool({
+      name: toolName,
+      description: "ts restart probe tool",
+      parameters: {},
+      execute: async () => ({ content: [{ type: "text", text: "ok" }] }),
+    });
+  },
+};
+export default plugin;
+`;
+    const entryPath = path.join(root, "index.ts");
+    fs.writeFileSync(entryPath, tsBody("ts_tool_v1"), "utf-8");
+    const writeTsManifest = (toolName: string) => {
+      fs.writeFileSync(
+        path.join(root, "openclaw.plugin.json"),
+        JSON.stringify({
+          id: "ts-restart-probe",
+          configSchema: { type: "object", additionalProperties: false },
+          contracts: { tools: [toolName] },
+        }),
+        "utf-8",
+      );
+    };
+    writeTsManifest("ts_tool_v1");
+    const config = {
+      plugins: { load: { paths: [entryPath] }, allow: ["ts-restart-probe"] },
+    };
+
+    expect(loadedToolNames(loadOpenClawPlugins({ config }))).toContain("ts_tool_v1");
+
+    fs.writeFileSync(entryPath, tsBody("ts_tool_v2"), "utf-8");
+    writeTsManifest("ts_tool_v2");
+
+    clearPluginCachesForInProcessRestart();
+    const reloaded = loadOpenClawPlugins({ config });
+    expect(loadedToolNames(reloaded)).toContain("ts_tool_v2");
+    expect(loadedToolNames(reloaded)).not.toContain("ts_tool_v1");
+  });
+
   it("tracks only plugin-owned modules for restart eviction, never shared runtime (#103688 review)", () => {
     useNoBundledPlugins();
     const plugin = writePlugin({

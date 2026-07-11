@@ -99,7 +99,10 @@ import {
   restoreMemoryPluginState,
 } from "./memory-state.js";
 import { unwrapDefaultModuleExport } from "./module-export.js";
-import { clearNativeRequireJavaScriptModuleCache } from "./native-module-require.js";
+import {
+  clearNativeRequireJavaScriptModuleCache,
+  clearRequireModuleCacheUnderPluginRoot,
+} from "./native-module-require.js";
 import {
   fingerprintPluginDiscoveryContext,
   resolvePluginDiscoveryContext,
@@ -412,12 +415,18 @@ export function clearPluginLoaderCache(): void {
 export function clearPluginCachesForInProcessRestart(): void {
   clearPluginLoaderCache();
   clearPluginManifestLoadCache();
-  // Evict each tracked entrypoint plus its plugin-LOCAL dependency subtree (e.g. a
-  // helper.cjs beside the entry) through the existing native cache-clear owner, so a
-  // fresh entrypoint is never paired with stale local exports while shared OpenClaw
-  // and third-party singleton modules stay untouched.
+  // Evict each tracked entrypoint plus its plugin-LOCAL dependency subtree so a
+  // fresh entrypoint is never paired with stale local exports while shared
+  // OpenClaw and third-party singleton modules stay untouched. Root-scoped
+  // purge covers jiti-transformed TypeScript entries too (jiti registers them
+  // in Node's CJS cache under their source paths, which the native-JS eviction
+  // cannot match by extension).
   for (const [modulePath, rootDir] of importedPluginModulePathsForRestart) {
-    clearNativeRequireJavaScriptModuleCache(modulePath, rootDir ? { dependencyRoot: rootDir } : {});
+    if (rootDir) {
+      clearRequireModuleCacheUnderPluginRoot(rootDir);
+    } else {
+      clearNativeRequireJavaScriptModuleCache(modulePath, {});
+    }
   }
   importedPluginModulePathsForRestart.clear();
 }
