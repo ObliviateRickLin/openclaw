@@ -1160,7 +1160,7 @@ export const nl: TranslationMap = {
     unsavedChangesCount: "{count} unsaved changes",
     noChanges: "No changes",
     open: "Openen",
-    clear: "Wissen",
+    clear: "Verwerpen",
     apply: "Apply",
     applying: "Applying…",
     update: "Update",

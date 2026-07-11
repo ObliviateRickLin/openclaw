@@ -1165,7 +1165,7 @@ export const it: TranslationMap = {
     unsavedChangesCount: "{count} unsaved changes",
     noChanges: "No changes",
     open: "Apri",
-    clear: "Cancella",
+    clear: "Scarta",
     apply: "Apply",
     applying: "Applying…",
     update: "Update",

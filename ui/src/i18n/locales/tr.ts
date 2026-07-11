@@ -1166,7 +1166,7 @@ export const tr: TranslationMap = {
     unsavedChangesCount: "{count} unsaved changes",
     noChanges: "No changes",
     open: "Aç",
-    clear: "Temizle",
+    clear: "Sıfırla",
     apply: "Apply",
     applying: "Applying…",
     update: "Update",

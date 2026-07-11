@@ -1145,7 +1145,7 @@ export const hi: TranslationMap = {
     unsavedChangesCount: "{count} unsaved changes",
     noChanges: "No changes",
     open: "खोलें",
-    clear: "साफ़ करें",
+    clear: "रीसेट करें",
     apply: "Apply",
     applying: "Applying…",
     update: "Update",

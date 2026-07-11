@@ -1153,7 +1153,7 @@ export const vi: TranslationMap = {
     unsavedChangesCount: "{count} unsaved changes",
     noChanges: "No changes",
     open: "Mở",
-    clear: "Xóa",
+    clear: "Hủy bỏ",
     apply: "Apply",
     applying: "Applying…",
     update: "Update",

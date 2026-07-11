@@ -1153,7 +1153,7 @@ export const ko: TranslationMap = {
     unsavedChangesCount: "{count} unsaved changes",
     noChanges: "No changes",
     open: "열기",
-    clear: "지우기",
+    clear: "초기화",
     apply: "Apply",
     applying: "Applying…",
     update: "Update",

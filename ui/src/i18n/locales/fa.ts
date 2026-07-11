@@ -1152,7 +1152,7 @@ export const fa: TranslationMap = {
     unsavedChangesCount: "{count} unsaved changes",
     noChanges: "No changes",
     open: "باز کردن",
-    clear: "پاک کردن",
+    clear: "بازنشانی",
     apply: "Apply",
     applying: "Applying…",
     update: "Update",

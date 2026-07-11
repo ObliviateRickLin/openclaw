@@ -1140,7 +1140,7 @@ export const zh_TW: TranslationMap = {
     unsavedChangesCount: "{count} 項未儲存的變更",
     noChanges: "無變更",
     open: "開啟",
-    clear: "清除",
+    clear: "重設",
     apply: "套用",
     applying: "套用中…",
     update: "更新",
