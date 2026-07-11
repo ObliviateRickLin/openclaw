@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { WorktreeSnapshotError } from "../../agents/worktrees/service.js";
 import type { ManagedWorktreeRecord } from "../../agents/worktrees/types.js";
+import { isManagedWorktreeOwnerActive } from "../worktree-owner-activity.js";
 import { createWorktreesHandlers } from "./worktrees.js";
 
 const record: ManagedWorktreeRecord = {
@@ -65,6 +66,10 @@ describe("worktrees gateway methods", () => {
       { removed: [record.id], orphansDeleted: 1, snapshotsPruned: 2 },
       undefined,
     ]);
+    // The RPC path must pass the same session-owner liveness predicate the
+    // scheduled maintenance sweep passes; omitting it removes a live session's
+    // worktree (#104108).
+    expect(service.gc).toHaveBeenCalledWith({ isOwnerActive: isManagedWorktreeOwnerActive });
 
     expect(service.create).toHaveBeenCalledWith({
       repoRoot: "/repo",
