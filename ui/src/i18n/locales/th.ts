@@ -1140,7 +1140,7 @@ export const th: TranslationMap = {
     unsavedChangeCount: "{count} unsaved change",
     unsavedChangesCount: "{count} unsaved changes",
     noChanges: "No changes",
-    open: "Open",
+    open: "เปิด",
     clear: "ล้าง",
     apply: "Apply",
     applying: "Applying…",

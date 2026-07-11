@@ -1153,7 +1153,7 @@ export const pt_BR: TranslationMap = {
     unsavedChangeCount: "{count} unsaved change",
     unsavedChangesCount: "{count} unsaved changes",
     noChanges: "No changes",
-    open: "Open",
+    open: "Abrir",
     clear: "Limpar",
     apply: "Apply",
     applying: "Applying…",

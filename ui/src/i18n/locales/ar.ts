@@ -1145,7 +1145,7 @@ export const ar: TranslationMap = {
     unsavedChangeCount: "{count} unsaved change",
     unsavedChangesCount: "{count} unsaved changes",
     noChanges: "No changes",
-    open: "مفتوح",
+    open: "فتح",
     clear: "مسح",
     apply: "Apply",
     applying: "Applying…",

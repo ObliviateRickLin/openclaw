@@ -1165,7 +1165,7 @@ export const tr: TranslationMap = {
     unsavedChangeCount: "{count} unsaved change",
     unsavedChangesCount: "{count} unsaved changes",
     noChanges: "No changes",
-    open: "Open",
+    open: "Aç",
     clear: "Temizle",
     apply: "Apply",
     applying: "Applying…",

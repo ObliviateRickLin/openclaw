@@ -1153,7 +1153,7 @@ export const uk: TranslationMap = {
     unsavedChangeCount: "{count} unsaved change",
     unsavedChangesCount: "{count} unsaved changes",
     noChanges: "No changes",
-    open: "Open",
+    open: "Відкрити",
     clear: "Очистити",
     apply: "Apply",
     applying: "Applying…",

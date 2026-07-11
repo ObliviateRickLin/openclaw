@@ -1154,7 +1154,7 @@ export const id: TranslationMap = {
     unsavedChangeCount: "{count} unsaved change",
     unsavedChangesCount: "{count} unsaved changes",
     noChanges: "No changes",
-    open: "Terbuka",
+    open: "Buka",
     clear: "Hapus",
     apply: "Apply",
     applying: "Applying…",

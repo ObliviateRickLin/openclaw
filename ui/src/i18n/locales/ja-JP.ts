@@ -1160,7 +1160,7 @@ export const ja_JP: TranslationMap = {
     unsavedChangeCount: "{count} unsaved change",
     unsavedChangesCount: "{count} unsaved changes",
     noChanges: "No changes",
-    open: "Open",
+    open: "開く",
     clear: "クリア",
     apply: "Apply",
     applying: "Applying…",
