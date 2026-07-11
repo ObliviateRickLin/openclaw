@@ -11,6 +11,7 @@ import {
   shouldRotateCompactionTranscript,
 } from "./compaction-successor-transcript.js";
 import { hardenManualCompactionBoundary } from "./manual-compaction-boundary.js";
+import { rewriteTranscriptEntriesInSessionManager } from "./transcript-rewrite.js";
 
 let tmpDir: string | undefined;
 
@@ -446,28 +447,29 @@ describe("rotateTranscriptAfterCompaction", () => {
     expect(successorCompaction.firstKeptEntryId).toBe(compactionId);
   });
 
-  it("preserves unsummarized sibling branches and branch summaries", async () => {
+  it("collects abandoned sibling branches while keeping the active-chain branch summary", async () => {
     const dir = await createTmpDir();
     const manager = SessionManager.create(dir, dir);
 
     manager.appendMessage({ role: "user", content: "hello", timestamp: 1 });
     const branchFromId = manager.appendMessage(makeAssistant("hi there", 2));
 
-    const branchSummaryId = manager.branchWithSummary(
-      branchFromId,
-      "Summary of the abandoned branch.",
-    );
     const siblingMsgId = manager.appendMessage({
       role: "user",
       content: "do task B instead",
       timestamp: 3,
     });
-    manager.appendMessage(makeAssistant("done B", 4));
+    const siblingReplyId = manager.appendMessage(makeAssistant("done B", 4));
 
-    manager.branch(branchFromId);
+    const branchSummaryId = manager.branchWithSummary(
+      branchFromId,
+      "Summary of the abandoned branch.",
+    );
     manager.appendMessage({ role: "user", content: "do task A", timestamp: 5 });
-    const firstKeptId = manager.appendMessage(makeAssistant("done A", 6));
-    manager.appendCompaction("Summary of main branch.", firstKeptId, 5000);
+    manager.appendMessage(makeAssistant("done A", 6));
+    // Keep the branch summary in the kept pre-compaction span so the test can
+    // separate "on the active chain" from "summarized away".
+    manager.appendCompaction("Summary of main branch.", branchSummaryId, 5000);
     manager.appendMessage({ role: "user", content: "next", timestamp: 7 });
 
     const sessionFile = requireString(manager.getSessionFile(), "source session file");
@@ -486,19 +488,13 @@ describe("rotateTranscriptAfterCompaction", () => {
       allEntries,
       branchSummaryId,
       "branch_summary",
-      "preserved branch summary",
+      "preserved active-chain branch summary",
     );
     expect(branchSummary.summary).toBe("Summary of the abandoned branch.");
-    const siblingMessage = requireEntryByIdAndType(
-      allEntries,
-      siblingMsgId,
-      "message",
-      "preserved sibling message",
-    );
-    if (!("content" in siblingMessage.message)) {
-      throw new Error("expected sibling message content");
-    }
-    expect(siblingMessage.message.content).toBe("do task B instead");
+    // The abandoned task-B branch is unreachable from the active leaf; rotation
+    // collects it instead of copying it into every successor file (#103934).
+    expect(allEntries.some((entry) => entry.id === siblingMsgId)).toBe(false);
+    expect(allEntries.some((entry) => entry.id === siblingReplyId)).toBe(false);
 
     const activeContextText = JSON.stringify(successor.buildSessionContext().messages);
     expect(activeContextText).toContain("Summary of main branch.");
@@ -506,28 +502,30 @@ describe("rotateTranscriptAfterCompaction", () => {
     expect(activeContextText).not.toContain("do task B instead");
   });
 
-  it("orders preserved sibling branches after their surviving parents", async () => {
+  it("keeps scanned custom entries and kept-target labels while collecting dead branches", async () => {
     const dir = await createTmpDir();
     const manager = SessionManager.create(dir, dir);
 
     manager.appendMessage({ role: "user", content: "hello", timestamp: 1 });
     const branchFromId = manager.appendMessage(makeAssistant("hi there", 2));
 
-    const branchSummaryId = manager.branchWithSummary(
-      branchFromId,
-      "Summary of the inactive branch.",
-    );
-    const inactiveMsgId = manager.appendMessage({
+    // Custom entries are consumed via whole-file scans (provider replay
+    // markers, bootstrap completion), so they survive rotation even when a
+    // rewind left them off the active chain.
+    const customEntryId = manager.appendCustomEntry("test-replay-marker", { flag: true });
+    const deadMsgId = manager.appendMessage({
       role: "user",
-      content: "inactive branch",
+      content: "abandoned path",
       timestamp: 3,
     });
-    manager.appendMessage(makeAssistant("inactive done", 4));
+    const deadLabelTargetId = manager.appendMessage(makeAssistant("abandoned reply", 4));
+    manager.appendLabelChange(deadLabelTargetId, "dead-branch-label");
 
     manager.branch(branchFromId);
     manager.appendMessage({ role: "user", content: "active branch", timestamp: 5 });
-    manager.appendMessage(makeAssistant("active done", 6));
-    manager.appendCompaction("Summary of active work.", branchFromId, 5000);
+    const keptAssistantId = manager.appendMessage(makeAssistant("active done", 6));
+    const keptLabelId = manager.appendLabelChange(keptAssistantId, "kept-label");
+    manager.appendCompaction("Summary of active work.", keptAssistantId, 5000);
     const activeLeafId = manager.appendMessage({
       role: "user",
       content: "next active",
@@ -545,16 +543,82 @@ describe("rotateTranscriptAfterCompaction", () => {
       requireString(result.sessionFile, "successor session file"),
     );
     const entries = successor.getEntries();
-    const indexById = new Map(entries.map((entry, index) => [entry.id, index]));
-    expect(indexById.get(branchFromId)).toBeLessThan(indexById.get(branchSummaryId)!);
-    expect(indexById.get(branchSummaryId)).toBeLessThan(indexById.get(inactiveMsgId)!);
+    const entryIds = new Set(entries.map((entry) => entry.id));
+    expect(entryIds.has(customEntryId)).toBe(true);
+    expect(entryIds.has(keptLabelId)).toBe(true);
+    expect(entryIds.has(deadMsgId)).toBe(false);
+    expect(entryIds.has(deadLabelTargetId)).toBe(false);
+    expect(
+      entries.some((entry) => entry.type === "label" && entry.label === "dead-branch-label"),
+    ).toBe(false);
     expect(entries.at(-1)?.id).toBe(activeLeafId);
     expect(successor.getLeafId()).toBe(activeLeafId);
 
     const activeContextText = JSON.stringify(successor.buildSessionContext().messages);
     expect(activeContextText).toContain("Summary of active work.");
     expect(activeContextText).toContain("next active");
-    expect(activeContextText).not.toContain("inactive branch");
+    expect(activeContextText).not.toContain("abandoned path");
+  });
+
+  it("collects overflow-rewrite orphan suffixes at the next rotation (#103934)", async () => {
+    const dir = await createTmpDir();
+    const manager = SessionManager.create(dir, dir);
+
+    manager.appendMessage({ role: "user", content: "start", timestamp: 1 });
+    const oversizedAssistantId = manager.appendMessage(
+      makeAssistant(`huge tool output ${"x".repeat(2000)}`, 2),
+    );
+    manager.appendMessage({ role: "user", content: "follow-up", timestamp: 3 });
+    const tailAssistantId = manager.appendMessage(makeAssistant("tail answer", 4));
+
+    // Overflow recovery rewrites by forking from the rewritten entry's parent
+    // and re-appending the suffix; the original suffix entries stay behind as
+    // an unreachable branch.
+    const rewrite = rewriteTranscriptEntriesInSessionManager({
+      sessionManager: manager,
+      replacements: [
+        {
+          entryId: oversizedAssistantId,
+          message: makeAssistant("huge tool output [truncated]", 2),
+        },
+      ],
+    });
+    expect(rewrite.changed).toBe(true);
+    const entriesBeforeRotation = manager.getEntries();
+    // The dead originals are still physically present before rotation.
+    expect(entriesBeforeRotation.some((entry) => entry.id === oversizedAssistantId)).toBe(true);
+    expect(entriesBeforeRotation.some((entry) => entry.id === tailAssistantId)).toBe(true);
+
+    const branch = manager.getBranch();
+    // Keep the whole rewritten suffix: firstKept = the first re-appended copy.
+    const firstKeptId = requireString(branch.at(1)?.id, "first rewritten suffix id");
+    manager.appendCompaction("Summary of truncated work.", firstKeptId, 5000);
+    manager.appendMessage({ role: "user", content: "after compaction", timestamp: 5 });
+
+    const result = await rotateTranscriptAfterCompaction({
+      sessionManager: manager,
+      sessionFile: requireString(manager.getSessionFile(), "source session file"),
+      now: () => new Date("2026-04-27T13:15:00.000Z"),
+    });
+
+    expect(result.rotated).toBe(true);
+    const successor = SessionManager.open(
+      requireString(result.sessionFile, "successor session file"),
+    );
+    const entries = successor.getEntries();
+    const entryIds = new Set(entries.map((entry) => entry.id));
+    // The abandoned pre-rewrite originals disappear from the successor.
+    expect(entryIds.has(oversizedAssistantId)).toBe(false);
+    expect(entryIds.has(tailAssistantId)).toBe(false);
+    const serialized = JSON.stringify(entries);
+    expect(serialized).not.toContain(`huge tool output ${"x".repeat(20)}`);
+
+    const activeContextText = JSON.stringify(successor.buildSessionContext().messages);
+    expect(activeContextText).toContain("Summary of truncated work.");
+    expect(activeContextText).toContain("after compaction");
+    // Exactly one copy of the rewritten suffix survives.
+    const followUpMatches = serialized.match(/follow-up/g) ?? [];
+    expect(followUpMatches).toHaveLength(1);
   });
 });
 

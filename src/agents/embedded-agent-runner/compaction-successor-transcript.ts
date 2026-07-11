@@ -227,6 +227,24 @@ function buildSuccessorEntries(params: {
   for (const entryId of preservedPreCompactionIds) {
     preCompactionKeptBranchIds.add(entryId);
   }
+  const activeBranchIds = new Set<string>();
+  for (const entry of branch) {
+    activeBranchIds.add(entry.id);
+  }
+  // Rotation is the transcript's single full-rewrite point, so unreachable
+  // branches are collected here (#103934): overflow-recovery rewrites fork and
+  // re-append the active suffix, and the abandoned originals would otherwise be
+  // copied whole into every successor file forever. Keep the active-leaf
+  // ancestry plus entry types with whole-file consumers: `custom` entries are
+  // read via full scans (provider replay markers, bootstrap completion) and
+  // labels follow their targets below. Full history stays in the predecessor
+  // file, which the successor header links via parentSession.
+  for (const entry of allEntries) {
+    if (activeBranchIds.has(entry.id) || entry.type === "custom" || entry.type === "label") {
+      continue;
+    }
+    removedIds.add(entry.id);
+  }
   for (const entry of allEntries) {
     if (entry.type === "label" && removedIds.has(entry.targetId)) {
       removedIds.add(entry.id);
@@ -239,10 +257,6 @@ function buildSuccessorEntries(params: {
     const entry = allEntries[index];
     entryById.set(entry.id, entry);
     originalIndexById.set(entry.id, index);
-  }
-  const activeBranchIds = new Set<string>();
-  for (const entry of branch) {
-    activeBranchIds.add(entry.id);
   }
   const keptEntries: SessionEntry[] = [];
   for (const entry of allEntries) {
