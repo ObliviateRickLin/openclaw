@@ -1144,9 +1144,6 @@ export const zh_CN: TranslationMap = {
     applying: "应用中…",
     update: "更新",
     updating: "正在更新…",
-    searchPlaceholder: "搜索设置...",
-    searchAriaLabel: "搜索设置",
-    clearSearch: "清除搜索",
   },
   workspaces: {
     tabs: {

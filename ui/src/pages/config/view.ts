@@ -1577,8 +1577,8 @@ export function renderConfig(props: ConfigProps) {
                           <input
                             type="text"
                             class="config-search__input"
-                            placeholder="${t("settings.searchPlaceholder")}"
-                            aria-label="${t("settings.searchAriaLabel")}"
+                            placeholder="${t("nav.settingsSearchPlaceholder")}"
+                            aria-label="${t("nav.settingsSearchLabel")}"
                             .value=${props.searchQuery}
                             @input=${(e: Event) =>
                               props.onSearchChange((e.target as HTMLInputElement).value)}
@@ -1587,7 +1587,7 @@ export function renderConfig(props: ConfigProps) {
                             ? html`
                                 <button
                                   class="config-search__clear"
-                                  aria-label="${t("settings.clearSearch")}"
+                                  aria-label="${t("nav.settingsSearchClear")}"
                                   @click=${() => props.onSearchChange("")}
                                 >
                                   ×

@@ -1165,9 +1165,6 @@ export const nl: TranslationMap = {
     applying: "Applying…",
     update: "Update",
     updating: "Updating…",
-    searchPlaceholder: "Search settings...",
-    searchAriaLabel: "Search settings",
-    clearSearch: "Clear search",
   },
   workspaces: {
     tabs: {

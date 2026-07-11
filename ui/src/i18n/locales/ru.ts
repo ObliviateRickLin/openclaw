@@ -1165,9 +1165,6 @@ export const ru: TranslationMap = {
     applying: "Applying…",
     update: "Update",
     updating: "Обновление…",
-    searchPlaceholder: "Search settings...",
-    searchAriaLabel: "Search settings",
-    clearSearch: "Clear search",
   },
   workspaces: {
     tabs: {

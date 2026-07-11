@@ -1159,9 +1159,6 @@ export const pt_BR: TranslationMap = {
     applying: "Applying…",
     update: "Update",
     updating: "Updating…",
-    searchPlaceholder: "Search settings...",
-    searchAriaLabel: "Search settings",
-    clearSearch: "Clear search",
   },
   workspaces: {
     tabs: {

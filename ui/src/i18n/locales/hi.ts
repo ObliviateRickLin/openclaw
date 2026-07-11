@@ -1150,9 +1150,6 @@ export const hi: TranslationMap = {
     applying: "Applying…",
     update: "Update",
     updating: "अपडेट हो रहा है…",
-    searchPlaceholder: "Search settings...",
-    searchAriaLabel: "Search settings",
-    clearSearch: "Clear search",
   },
   workspaces: {
     tabs: {
