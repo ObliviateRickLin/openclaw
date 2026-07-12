@@ -7,6 +7,7 @@ import type { ModelProviderConfig } from "../../config/types.models.js";
 import type { OpenClawConfig } from "../../config/types.openclaw.js";
 import { planManifestModelCatalogRows } from "../../model-catalog/manifest-planner.js";
 import { normalizePluginsConfig } from "../../plugins/config-state.js";
+import { getCurrentPluginMetadataSnapshot } from "../../plugins/current-plugin-metadata-snapshot.js";
 import { listOpenClawPluginManifestMetadata } from "../../plugins/manifest-metadata-scan.js";
 import { passesManifestOwnerBasePolicy } from "../../plugins/manifest-owner-policy.js";
 import { loadPluginManifestRegistry } from "../../plugins/manifest-registry.js";
@@ -207,16 +208,28 @@ export function canonicalizeManifestModelCatalogProviderAlias(params: {
   if (!provider) {
     return params.provider;
   }
-  return (
-    resolveManifestModelCatalogProviderAlias({
-      provider,
-      plugins: loadPluginManifestRegistry({
-        config: params.cfg,
-        workspaceDir: params.workspaceDir,
-        env: params.env ?? process.env,
-      }).plugins,
-    }) ?? params.provider
-  );
+  const env = params.env ?? process.env;
+  // Warm model-resolution passes call this per turn (and twice per pass via
+  // normalizeProviderModelRef). loadPluginManifestRegistry re-runs full
+  // filesystem discovery + manifest parsing every call, so reuse the
+  // process-stable Gateway plugin-metadata snapshot when one exists. Fall back to
+  // a direct registry load when there is no current snapshot (cold start /
+  // non-Gateway callers) rather than building a fresh full snapshot (#105543).
+  const currentSnapshot = getCurrentPluginMetadataSnapshot({
+    config: params.cfg,
+    env,
+    ...(params.workspaceDir !== undefined
+      ? { workspaceDir: params.workspaceDir }
+      : { allowWorkspaceScopedSnapshot: true }),
+  });
+  const plugins =
+    currentSnapshot?.plugins ??
+    loadPluginManifestRegistry({
+      config: params.cfg,
+      workspaceDir: params.workspaceDir,
+      env,
+    }).plugins;
+  return resolveManifestModelCatalogProviderAlias({ provider, plugins }) ?? params.provider;
 }
 
 /** Returns whether a bundled static catalog asks runtime discovery to augment its rows. */
