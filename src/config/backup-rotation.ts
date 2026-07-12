@@ -133,8 +133,6 @@ export async function createPreUpdateConfigSnapshot(params: {
   if (preUpdateConfigSnapshotsWritten.has(snapshotKey)) {
     return;
   }
-  // Mark before I/O so a failed best-effort write cannot loop on every later write.
-  preUpdateConfigSnapshotsWritten.add(snapshotKey);
   const snapshotPath = `${params.configPath}.pre-update`;
   try {
     const content = await params.fs.readFile(params.configPath, "utf-8");
@@ -143,6 +141,12 @@ export async function createPreUpdateConfigSnapshot(params: {
       mode: 0o600,
       flag: "w",
     });
+    // Mark only after a successful write. Marking earlier permanently blocked
+    // future snapshots for the process when the first read/write failed
+    // transiently (e.g. a temporary file lock), silently dropping the operator's
+    // rollback point (#105193). Leaving it unmarked on failure lets the next
+    // update attempt retry; pre-update snapshots are per-update, not per-write.
+    preUpdateConfigSnapshotsWritten.add(snapshotKey);
   } catch {
     // best-effort, do not block update
   }

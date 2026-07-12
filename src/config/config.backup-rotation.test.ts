@@ -222,6 +222,40 @@ describe("config backup rotation", () => {
     });
   });
 
+  it("createPreUpdateConfigSnapshot retries after a transient first-attempt failure (#105193)", async () => {
+    await withTempHome(async () => {
+      const configPath = resolveConfigPathFromTempState();
+      const content = JSON.stringify({ version: "original" });
+      await fs.writeFile(configPath, content, { mode: 0o600 });
+      const snapshotPath = `${configPath}.pre-update`;
+      const { existsSync } = await import("node:fs");
+
+      // First attempt: the read fails transiently (e.g. a temporary file lock).
+      let failNextRead = true;
+      const flakyReadFile = async (p: string, encoding: "utf-8") => {
+        if (failNextRead) {
+          failNextRead = false;
+          throw Object.assign(new Error("EBUSY: resource busy or locked"), { code: "EBUSY" });
+        }
+        return fs.readFile(p, encoding);
+      };
+
+      await createPreUpdateConfigSnapshot({
+        configPath,
+        fs: { writeFile: fs.writeFile, readFile: flakyReadFile, existsSync },
+      });
+      // No snapshot yet, and the file must not be marked as done.
+      await expect(fs.access(snapshotPath)).rejects.toBeTruthy();
+
+      // A later update attempt succeeds and the snapshot is finally written.
+      await createPreUpdateConfigSnapshot({
+        configPath,
+        fs: { writeFile: fs.writeFile, readFile: flakyReadFile, existsSync },
+      });
+      await expect(fs.readFile(snapshotPath, "utf-8")).resolves.toBe(content);
+    });
+  });
+
   it("createPreUpdateConfigSnapshot is a no-op when config does not exist", async () => {
     await withTempHome(async () => {
       const configPath = resolveConfigPathFromTempState();
