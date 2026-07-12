@@ -86,18 +86,8 @@ import {
 } from "./manifest-registry.js";
 import type { PluginDiagnostic } from "./manifest-types.js";
 import { clearPluginManifestLoadCache } from "./manifest.js";
-import {
-  clearMemoryEmbeddingProviders,
-  listRegisteredMemoryEmbeddingProviders,
-  restoreRegisteredMemoryEmbeddingProviders,
-} from "./memory-embedding-providers.js";
-import {
-  clearMemoryPluginState,
-  getMemoryCapabilityRegistration,
-  listMemoryCorpusSupplements,
-  listMemoryPromptSupplements,
-  restoreMemoryPluginState,
-} from "./memory-state.js";
+import { clearMemoryEmbeddingProviders } from "./memory-embedding-providers.js";
+import { clearMemoryPluginState } from "./memory-state.js";
 import { unwrapDefaultModuleExport } from "./module-export.js";
 import {
   clearNativeRequireJavaScriptModuleCache,
