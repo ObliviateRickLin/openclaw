@@ -612,6 +612,62 @@ describe("processGatewayAllowlist", () => {
     expect(serialized).not.toContain("agent-1");
   });
 
+  it("resolves a triggerless CLI no-route approval to a completed denial via the real gate (#104413)", async () => {
+    // Drive the REAL shouldResolveExecApprovalUnavailableInline (not the mock)
+    // so the composed gateway host path is proven end to end: a CLI
+    // `openclaw agent` turn has no trigger and no approval route, the gateway
+    // pre-resolves decision:null after expiring the record, and the host must
+    // apply askFallback inline instead of hanging on an already-finished record.
+    const actualShared = await vi.importActual<typeof import("./bash-tools.exec-host-shared.js")>(
+      "./bash-tools.exec-host-shared.js",
+    );
+    shouldResolveExecApprovalUnavailableInlineMock.mockImplementation(
+      actualShared.shouldResolveExecApprovalUnavailableInline,
+    );
+    createAndRegisterDefaultExecApprovalRequestMock.mockResolvedValue({
+      approvalId: "approval-cli-no-route",
+      approvalSlug: "slug",
+      warningText: "",
+      expiresAtMs: 0,
+      preResolvedDecision: null,
+      initiatingSurface: { kind: "unsupported" },
+      sentApproverDms: false,
+      unavailableReason: "no-approval-route",
+    });
+    createExecApprovalDecisionStateMock.mockReturnValue({
+      baseDecision: { timedOut: true },
+      approvedByAsk: false,
+      deniedReason: "approval-timeout",
+    });
+    enforceStrictInlineEvalApprovalBoundaryMock.mockReturnValue({
+      approvedByAsk: false,
+      deniedReason: "approval-timeout",
+    });
+    const captured = captureSecurityEvents();
+
+    try {
+      await expect(
+        runGatewayAllowlist({
+          command: "echo askfallback-proof",
+          agentId: "agent-1",
+          ask: "on-miss",
+          askFallback: "deny",
+          // trigger intentionally omitted — a plain CLI `openclaw agent` run.
+        }),
+      ).rejects.toThrow("denied");
+    } finally {
+      captured.stop();
+    }
+
+    // The real gate returned true for the triggerless no-route/null state, so
+    // the host reached the inline denial instead of the async pending wait.
+    expect(shouldResolveExecApprovalUnavailableInlineMock).toHaveReturnedWith(true);
+    expect(captured.events.at(-1)).toMatchObject({
+      action: "exec.approval.denied",
+      outcome: "denied",
+    });
+  });
+
   it("emits an approved security event for inline unavailable approval approvals", async () => {
     shouldResolveExecApprovalUnavailableInlineMock.mockReturnValue(true);
     createExecApprovalDecisionStateMock.mockReturnValue({
