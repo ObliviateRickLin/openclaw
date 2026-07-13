@@ -404,6 +404,12 @@ describe("failover-error", () => {
         message: "This model is not supported for tool calling.",
       }),
     ).not.toBe("model_not_found");
+    expect(
+      resolveFailoverReasonFromError({
+        status: 400,
+        message: "This model is not supported when using tool calling.",
+      }),
+    ).not.toBe("model_not_found");
   });
 
   it("does not classify generic access errors as model_not_found", () => {
