@@ -517,11 +517,15 @@ async function noteAuthProfileHealthForTarget(params: {
     const errors: string[] = [];
     for (const profile of refreshTargets) {
       try {
+        // Explicit operator-accepted repair must force one refresh: without it the
+        // resolver returns the still-valid (but doctor-warned) access token untouched,
+        // so an accepted "refresh now" leaves the same expiring warning (#108098).
         await resolveApiKeyForProfile({
           cfg: params.cfg,
           store,
           profileId: profile.profileId,
           agentDir: params.target.agentDir,
+          forceRefresh: true,
         });
       } catch (err) {
         const message = formatErrorMessage(err);

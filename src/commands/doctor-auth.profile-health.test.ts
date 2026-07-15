@@ -506,6 +506,37 @@ describe("noteAuthProfileHealth", () => {
     );
   });
 
+  it("forces a refresh when the operator accepts the expiring-token repair (#108098)", async () => {
+    const now = 1_700_000_000_000;
+    vi.spyOn(Date, "now").mockReturnValue(now);
+    const agentDir = path.join(tempDir, "main-agent");
+    writeAuthStore(agentDir);
+    authProfileMocks.hasAnyAuthProfileStoreSource.mockReturnValue(true);
+    // Access token expires inside doctor's 24h warn window but is still valid now, so the
+    // resolver would return it untouched unless the accepted repair forces a refresh.
+    authProfileMocks.ensureAuthProfileStore.mockReturnValue(
+      expiredStore("openai-codex:default", now + 60 * 60 * 1000),
+    );
+    authProfileMocks.resolveApiKeyForProfile.mockResolvedValue("token");
+
+    await noteAuthProfileHealth({
+      cfg: {
+        agents: { list: [{ id: "main", default: true, agentDir }] },
+      } as OpenClawConfig,
+      prompter: {
+        confirmAutoFix: vi.fn(async () => true),
+      } as unknown as DoctorPrompter,
+      allowKeychainPrompt: false,
+    });
+
+    expect(authProfileMocks.resolveApiKeyForProfile).toHaveBeenCalledWith(
+      expect.objectContaining({
+        profileId: "openai-codex:default",
+        forceRefresh: true,
+      }),
+    );
+  });
+
   it.each([
     [
       "openai-codex:default",
